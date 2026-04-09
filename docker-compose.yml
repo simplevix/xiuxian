@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  xiantu-game:
+    build: .
+    ports:
+      - "3000:80"
+    volumes:
+      - game-data:/usr/share/nginx/html/data
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+    networks:
+      - xiantu-network
+
+volumes:
+  game-data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data
+
+networks:
+  xiantu-network:
+    driver: bridge
