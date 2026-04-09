@@ -1,18 +1,44 @@
-# 仙途问路 - 修仙挂机游戏
+# 仙途问路 🏮
 
-一款基于 Vue3 + Element Plus + Pinia 的文字修仙RPG游戏。
+> 一款基于 Vue 3 + TypeScript 的修仙放置游戏
 
-## 特性
+![Vue](https://img.shields.io/badge/Vue-3.x-42b883?style=flat-square&logo=vuedotjs)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178c6?style=flat-square&logo=typescript)
+![Vite](https://img.shields.io/badge/Vite-5.x-646cff?style=flat-square&logo=vite)
 
-- 🧘 **挂机修炼**: 自动吸收灵气，突破境界
-- ⚔️ **打怪升级**: 击败妖兽获取装备和灵石
-- 🐉 **灵宠系统**: 收服灵兽，并肩作战
-- 🎲 **随机掉落**: 史诗装备、仙器等你来拿
-- 💾 **自动存档**: localStorage 持久化
+## 🎮 游戏简介
 
-## 快速开始
+《仙途问路》是一款修仙题材的放置类网页游戏。玩家将从凡人开始，通过修炼、战斗、收集功法，一步步踏上修仙之路，最终得道成仙。
 
-### 开发模式
+### 核心玩法
+
+- 🗡️ **战斗系统** - 挑战各路妖魔鬼怪，获取经验和宝物
+- 📜 **功法系统** - 收集和装备功法，获得强大属性加成
+- 🏪 **商店系统** - 使用灵石购买装备和功法
+- 🌍 **世界探索** - 解锁不同境界的地图区域
+- 💾 **数据持久化** - 本地 SQLite 数据库存储游戏进度
+
+## ✨ 特色功能
+
+- 🎨 精美的修仙风格 UI 设计
+- ⚡ 流畅的实时战斗动画
+- 📱 响应式布局，支持移动端访问
+- 🔄 自动存档，无需担心进度丢失
+
+## 🛠️ 技术栈
+
+| 技术 | 说明 |
+|------|------|
+| Vue 3 | 渐进式 JavaScript 框架 |
+| TypeScript | 类型安全的 JavaScript 超集 |
+| Pinia | Vue 3 状态管理库 |
+| Element Plus | UI 组件库 |
+| Vite | 下一代前端构建工具 |
+| SQLite (WASM) | 浏览器端数据库 |
+
+## 🚀 快速开始
+
+### 本地运行
 
 ```bash
 # 安装依赖
@@ -21,67 +47,49 @@ npm install
 # 启动开发服务器
 npm run dev
 
-# 访问 http://localhost:3000
-```
-
-### 生产构建
-
-```bash
+# 构建生产版本
 npm run build
 ```
 
 ### Docker 部署
 
 ```bash
-# 一键启动
+# 构建并启动容器
 docker-compose up -d
 
-# 访问 http://localhost:3000
+# 访问应用
+# http://localhost:8080
 ```
 
-### NAS 部署
+## 📁 项目结构
 
-1. 修改 `docker-compose.yml` 中的 volume 路径:
-```yaml
-volumes:
-  game-data:
-    driver: local
-    driver_opts:
-      type: none
-      o: bind
-      device: /你的NAS路径/game-data
+```
+xiuxian/
+├── src/
+│   ├── components/    # Vue 组件
+│   ├── views/        # 页面视图
+│   ├── stores/       # Pinia 状态管理
+│   ├── types/        # TypeScript 类型定义
+│   └── utils/        # 工具函数
+├── public/           # 静态资源
+├── docker-compose.yml
+└── Dockerfile
 ```
 
-2. 在 NAS 上运行 `docker-compose up -d`
+## 🎯 游戏境界
 
-## 技术栈
+| 境界 | 说明 |
+|------|------|
+| 炼气期 | 修仙入门，基础修炼 |
+| 筑基期 | 稳固根基，小有所成 |
+| 金丹期 | 内结金丹，实力大增 |
+| 元婴期 | 元婴出窍，神通初现 |
+| 化神期 | 化凡为神，飞升在即 |
 
-- Vue 3 (Composition API)
-- Element Plus
-- Pinia
-- TypeScript
-- Vite
-- Docker
+## 📝 License
 
-## 游戏说明
+MIT License - 欢迎开源与二次创作
 
-### 境界
-练气期 → 筑基期 → 金丹期 → 元婴期 → 化神期 → 渡劫期 → 飞升期
+---
 
-### 装备品质
-普通 → 优秀 → 稀有 → 史诗 → 仙器
-
-### 神器示例
-- 紫晶破晓戟
-- 寒霜凝露链
-- 九天混元甲
-- 乾坤戒
-
-### 场景
-- 🌲 灵气森林 (Lv.1-10)
-- 🌑 幽冥深渊 (Lv.11-30)
-- ⛰️ 极霄峰 (Lv.31-50)
-
-## License
-
-MIT
+⭐ 如果这个项目对你有帮助，请给个 Star！
