@@ -22,7 +22,7 @@ const activeTab = ref('battle')
 const autoSaveTimer = ref<number | null>(null)
 
 onMounted(() => {
-  // 自动存档
+  // 自动存档（每30秒）
   autoSaveTimer.value = window.setInterval(() => {
     playerStore.saveGame()
   }, 30000)
@@ -70,11 +70,61 @@ async function handleReset() {
       '警告',
       { confirmButtonText: '确定重置', cancelButtonText: '取消', type: 'warning' }
     )
-    playerStore.deleteGame()
+    await playerStore.deleteGame()
     window.location.reload()
   } catch {
     // 取消
   }
+}
+
+// 导出存档备份
+async function handleExportSave() {
+  try {
+    const { exportAllSaves } = await import('@/utils/saveManager')
+    const data = await exportAllSaves()
+    const blob = new Blob([data], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `仙途问路_存档备份_${new Date().toISOString().slice(0, 10)}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+    ElMessage.success('存档已导出')
+  } catch (e) {
+    console.error('导出失败:', e)
+    ElMessage.error('导出失败')
+  }
+}
+
+// 导入存档备份
+function handleImportSave() {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.accept = '.json'
+  input.onchange = async () => {
+    const file = input.files?.[0]
+    if (!file) return
+
+    try {
+      const text = await file.text()
+      await ElMessageBox.confirm(
+        '导入存档将覆盖当前数据，确定要继续吗？',
+        '导入存档',
+        { confirmButtonText: '确定导入', cancelButtonText: '取消', type: 'warning' }
+      )
+
+      const { importAllSaves } = await import('@/utils/saveManager')
+      await importAllSaves(text)
+      ElMessage.success('存档导入成功，页面即将刷新')
+      setTimeout(() => window.location.reload(), 1000)
+    } catch (e: any) {
+      if (e !== 'cancel') {
+        console.error('导入失败:', e)
+        ElMessage.error('导入失败，文件格式可能无效')
+      }
+    }
+  }
+  input.click()
 }
 </script>
 
@@ -89,6 +139,12 @@ async function handleReset() {
         <SpiritBar />
       </div>
       <div class="header-right">
+        <el-button text @click="handleExportSave" title="导出存档">
+          <el-icon><Download /></el-icon>
+        </el-button>
+        <el-button text @click="handleImportSave" title="导入存档">
+          <el-icon><Upload /></el-icon>
+        </el-button>
         <el-button text @click="handleSave" title="保存游戏">
           <el-icon><FolderChecked /></el-icon>
         </el-button>

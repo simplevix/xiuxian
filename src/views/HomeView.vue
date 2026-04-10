@@ -45,8 +45,9 @@ function createPlayer() {
 }
 
 // 继续游戏
-function continueGame() {
-  if (playerStore.loadGame()) {
+async function continueGame() {
+  const loaded = await playerStore.loadGame()
+  if (loaded) {
     // 如果已登录但角色未绑定当前账号，给出提示
     if (isLoggedIn.value && !isCharacterBoundToCurrentUser.value) {
       ElMessage.warning('当前存档与登录账号不匹配，可以新建角色绑定到当前账号')
@@ -56,10 +57,11 @@ function continueGame() {
 }
 
 // 继续游戏（已登录账号）
-function continueAsUser() {
+async function continueAsUser() {
   if (isLoggedIn.value) {
     // 加载本地存档
-    if (playerStore.loadGame()) {
+    const loaded = await playerStore.loadGame()
+    if (loaded) {
       // 如果存档已绑定到当前账号，直接进入
       if (isCharacterBoundToCurrentUser.value) {
         emit('start')

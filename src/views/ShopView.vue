@@ -166,48 +166,73 @@ function buyArtifact(shopArtifact: { template: Omit<Artifact, 'id'>; price: numb
   }).catch(() => {})
 }
 
-// 功法商店
+// 功法商店 - 8级品质体系（参考《万界道友》设计）
 const techniqueShop = computed(() => {
   if (!player.value) return []
   const realmIndex = player.value.realmIndex
-  const techniqueList: Array<{ template: Omit<Technique, 'id'>; price: number }> = []
-  
-  // 功法价格配置（按品质和境界需求）
-  const prices: Record<string, number> = {
-    // 普通品质功法 500-1000
-    'basic_attack_1': 600, 'basic_defense_1': 550, 'basic_hp_1': 600,
-    'basic_crit_1': 700, 'basic_dodge_1': 650, 'spirit_recovery_1': 800,
-    // 优秀品质功法 1500-3000
-    'advanced_attack_1': 1800, 'advanced_defense_1': 1600, 'advanced_hp_1': 1800,
-    'advanced_crit_1': 2000, 'spirit_surge_1': 2200, 'advanced_dodge_1': 1800,
-    // 稀有品质功法 4000-8000
-    'expert_attack_1': 5000, 'expert_defense_1': 4500, 'expert_hp_1': 5000,
-    'expert_crit_1': 5500, 'spirit_absorption': 6000, 'shadow_step': 5000,
-    // 史诗品质功法 12000-25000
-    'master_attack_1': 15000, 'master_defense_1': 13000, 'master_hp_1': 15000,
-    'master_crit_1': 16000, 'celestial_dodge': 18000, 'celestial_spirit': 20000, 'divine_shield': 22000,
-    // 仙级品质功法 40000-100000
-    'immortal_attack_1': 50000, 'immortal_defense_1': 45000, 'immortal_hp_1': 50000,
-    'immortal_crit_1': 55000, 'immortal_spirit_1': 60000, 'immortal_dodge_1': 55000, 'ultimate_power': 100000
+  const techniqueList: Array<{ template: Omit<Technique, 'id'>; price: number; key: string }> = []
+
+  // 按品质定价（凡品→神品，8级）
+  const qualityBasePrice: Record<string, number> = {
+    common:    600,    // 凡品：炼气期
+    fine:      2000,   // 灵品：炼气-筑基
+    rare:      6000,   // 玄品：筑基-金丹
+    epic:      18000,  // 真品：金丹-元婴
+    excellent: 40000,  // 地品：元婴-化神
+    superior:  80000,  // 天品：炼虚-合体
+    immortal:  150000, // 仙品：大乘
+    divine:    300000, // 神品：渡劫
   }
-  
+
   for (const [key, template] of Object.entries(TECHNIQUE_TEMPLATES)) {
-    // 只显示境界要求低于或等于当前境界的功法
+    // 只显示境界要求 ≤ 当前境界的功法（含超前1个境界预览，价格翻倍）
     if (realmIndex >= template.realmRequirement) {
-      const basePrice = prices[key] || (template.quality === 'legendary' ? 50000 : 
-                                        template.quality === 'epic' ? 15000 : 
-                                        template.quality === 'rare' ? 5000 : 
-                                        template.quality === 'good' ? 2000 : 800)
-      techniqueList.push({ template, price: basePrice })
+      const basePrice = qualityBasePrice[template.quality] ?? 800
+      techniqueList.push({ template, price: basePrice, key })
     }
   }
-  
+
+  // 按品质从高到低排序，同品质按境界需求升序
+  const qualityOrder = ['divine', 'immortal', 'superior', 'excellent', 'epic', 'rare', 'fine', 'common']
   return techniqueList.sort((a, b) => {
-    // 按品质排序（传说 > 史诗 > 稀有 > 优秀 > 普通）
-    const qualityOrder = ['legendary', 'epic', 'rare', 'good', 'common']
-    return qualityOrder.indexOf(b.template.quality) - qualityOrder.indexOf(a.template.quality)
+    const qa = qualityOrder.indexOf(a.template.quality)
+    const qb = qualityOrder.indexOf(b.template.quality)
+    if (qa !== qb) return qa - qb
+    return a.template.realmRequirement - b.template.realmRequirement
   })
 })
+
+// 功法辅助函数
+function getTechniqueColor(quality: string): string {
+  return TECHNIQUE_QUALITIES[quality as keyof typeof TECHNIQUE_QUALITIES]?.color ?? '#9e9e9e'
+}
+
+function getTechniqueQualityName(quality: string): string {
+  return TECHNIQUE_QUALITIES[quality as keyof typeof TECHNIQUE_QUALITIES]?.name ?? '凡品'
+}
+
+const EFFECT_ICONS: Record<string, string> = {
+  attackBonus: '⚔️', defenseBonus: '🛡️', hpBonus: '❤️',
+  critRate: '💥', critDamage: '💫', dodgeRate: '💨',
+  lifesteal: '🩸', spiritPerSec: '💎', damageReduction: '🔰',
+  reflectDamage: '🔄', regenPerSec: '💚'
+}
+
+const EFFECT_NAMES: Record<string, string> = {
+  attackBonus: '攻击', defenseBonus: '防御', hpBonus: '生命',
+  critRate: '暴击率', critDamage: '暴击伤害', dodgeRate: '闪避率',
+  lifesteal: '吸血', spiritPerSec: '灵气/秒', damageReduction: '减伤',
+  reflectDamage: '反弹', regenPerSec: '每秒回复'
+}
+
+// spiritPerSec / regenPerSec 是固定值，其他是百分比
+const FIXED_VALUE_EFFECTS = new Set(['spiritPerSec', 'regenPerSec', 'attackBonus', 'defenseBonus', 'hpBonus'])
+
+function getEffectDisplay(type: string, value: number): string {
+  const sign = value >= 0 ? '+' : ''
+  if (FIXED_VALUE_EFFECTS.has(type)) return `${sign}${value}`
+  return `${sign}${value}%`
+}
 
 function buyTechnique(shopTechnique: { template: Omit<Technique, 'id'>; price: number }) {
   if (!player.value) return
@@ -445,26 +470,22 @@ const activeShopTab = ref('gacha')
           :key="idx"
           class="technique-card game-card"
           :style="{ 
-            borderColor: technique.template.quality === 'legendary' ? '#ff9800' : 
-                          technique.template.quality === 'epic' ? '#9c27b0' :
-                          technique.template.quality === 'rare' ? '#2196f3' :
-                          technique.template.quality === 'good' ? '#4caf50' : '#9e9e9e' + '88',
-            background: technique.template.quality === 'legendary' ? 'linear-gradient(135deg, rgba(255, 152, 0, 0.15) 0%, rgba(255, 87, 34, 0.1) 100%)' :
-                        technique.template.quality === 'epic' ? 'linear-gradient(135deg, rgba(156, 39, 176, 0.15) 0%, rgba(156, 39, 176, 0.08) 100%)' :
-                        'var(--bg-secondary)'
+            borderColor: getTechniqueColor(technique.template.quality),
+            background: ['divine','immortal','superior'].includes(technique.template.quality)
+              ? `linear-gradient(135deg, ${getTechniqueColor(technique.template.quality)}22 0%, ${getTechniqueColor(technique.template.quality)}11 100%)`
+              : 'var(--bg-secondary)'
           }"
         >
+          <!-- 品类标签 -->
+          <div class="technique-category-tag" v-if="technique.template.category">
+            {{ { body:'💪炼体', spirit:'✨炼气', combat:'⚔️斗战', element:'🌟五行', ultimate:'🔮大道' }[technique.template.category] ?? '' }}
+          </div>
           <div class="technique-icon">📜</div>
-          <div class="technique-name" :style="{ 
-            color: technique.template.quality === 'legendary' ? '#ff9800' : 
-                   technique.template.quality === 'epic' ? '#9c27b0' :
-                   technique.template.quality === 'rare' ? '#2196f3' :
-                   technique.template.quality === 'good' ? '#4caf50' : '#9e9e9e'
-          }">
+          <div class="technique-name" :style="{ color: getTechniqueColor(technique.template.quality) }">
             {{ technique.template.name }}
           </div>
-          <div class="technique-quality">
-            {{ TECHNIQUE_QUALITIES[technique.template.quality]?.name || '普通' }}
+          <div class="technique-quality" :style="{ color: getTechniqueColor(technique.template.quality) }">
+            {{ getTechniqueQualityName(technique.template.quality) }}
           </div>
           <div class="technique-effects">
             <div 
@@ -472,27 +493,11 @@ const activeShopTab = ref('gacha')
               :key="eIdx"
               class="effect-item"
             >
-              <span class="effect-type">{{ effect.type === 'attackBonus' ? '⚔️' : 
-                                          effect.type === 'defenseBonus' ? '🛡️' :
-                                          effect.type === 'hpBonus' ? '❤️' :
-                                          effect.type === 'critRate' ? '💥' :
-                                          effect.type === 'critDamage' ? '💫' :
-                                          effect.type === 'dodgeRate' ? '💨' :
-                                          effect.type === 'lifesteal' ? '🩸' :
-                                          effect.type === 'spiritPerSec' ? '💎' :
-                                          effect.type === 'damageReduction' ? '🛡️' : '✨' }}</span>
+              <span class="effect-type">{{ EFFECT_ICONS[effect.type] ?? '✨' }}</span>
               <span class="effect-value" :style="{ color: effect.value >= 0 ? '#4caf50' : '#f44336' }">
-                {{ effect.value >= 0 ? '+' : '' }}{{ effect.value }}{{ effect.type === 'spiritPerSec' ? '/s' : '%' }}
+                {{ getEffectDisplay(effect.type, effect.value) }}
               </span>
-              <span class="effect-label">{{ effect.type === 'attackBonus' ? '攻击' : 
-                                         effect.type === 'defenseBonus' ? '防御' :
-                                         effect.type === 'hpBonus' ? '生命' :
-                                         effect.type === 'critRate' ? '暴击率' :
-                                         effect.type === 'critDamage' ? '暴击伤害' :
-                                         effect.type === 'dodgeRate' ? '闪避率' :
-                                         effect.type === 'lifesteal' ? '吸血' :
-                                         effect.type === 'spiritPerSec' ? '灵石/秒' :
-                                         effect.type === 'damageReduction' ? '减伤' : effect.type }}</span>
+              <span class="effect-label">{{ EFFECT_NAMES[effect.type] ?? effect.type }}</span>
             </div>
           </div>
           <div class="technique-desc">
@@ -502,10 +507,10 @@ const activeShopTab = ref('gacha')
             type="warning" 
             size="small" 
             class="buy-btn technique-buy-btn"
-            :disabled="player.spiritStones < technique.price || player.techniques.some(t => t.name === technique.template.name)"
+            :disabled="player.spiritStones < technique.price || (player.techniques || []).some(t => t.name === technique.template.name)"
             @click="buyTechnique(technique)"
           >
-            {{ player.techniques.some(t => t.name === technique.template.name) ? '已领悟' : `💎 ${technique.price}` }}
+            {{ (player.techniques || []).some(t => t.name === technique.template.name) ? '已领悟' : `💎 ${technique.price.toLocaleString()}` }}
           </el-button>
         </div>
       </div>

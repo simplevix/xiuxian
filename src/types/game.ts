@@ -1196,6 +1196,8 @@ export interface Equipment {
   // 套装属性
   setId?: string        // 所属套装ID
   setPieceIndex?: number // 套装部件索引 (0-5)
+  // 强化属性
+  enhancementLevel?: number  // 强化等级（0-无限）
 }
 
 // 装备栏类型
@@ -1232,12 +1234,35 @@ export interface Player {
   name: string
   realmIndex: number
   realmLevel: number
+  level: number  // 总等级
   hp: number
   maxHp: number
+  mp: number  // 法力值
+  maxMp: number
+  sp: number  // 怒气/能量
+  maxSp: number
   attack: number
   defense: number
   spiritEnergy: number
   spiritStones: number
+  spiritRoot: number  // 灵根品质 (1-10)
+  
+  // 战斗属性
+  critRate: number
+  critDamage: number
+  dodgeRate: number
+  hitRate: number
+  attackSpeed: number
+  lifesteal: number
+  damageReduction: number
+  reflectDamage: number
+  
+  // 修炼属性
+  wisdom: number      // 悟性
+  willpower: number   // 意志力
+  insight: number     // 感悟值
+  maxInsight: number  // 感悟上限
+  
   equipment: EquipmentSlots
   inventory: Equipment[]
   artifacts: Artifact[]
@@ -1248,12 +1273,23 @@ export interface Player {
   totalKills: number
   lastOnline: number
   createdAt: number
+  
   // 功法系统
   techniques: Technique[]
   equippedTechniqueIds: string[]  // 最多装备3个功法
+  
   // 阵法系统
   formation?: PlayerFormation      // 当前激活的阵法
   unlockedFormations: string[]     // 已解锁的阵法ID列表
+  
+  // Engine系统数据
+  buffs: any[]           // Buff列表
+  shields: any[]         // 护盾列表
+  injuries: any[]        // 伤势列表
+  learnedSkills: string[] // 已学习的技能ID
+  
+  // 游戏系统管理器（运行时，不保存）
+  gameSystem?: any
 }
 
 // 怪物
@@ -1576,29 +1612,35 @@ export const PET_TEMPLATES: Record<string, Omit<Pet, 'id' | 'spirit' | 'maxSpiri
 }
 
 // ==================== 功法系统 ====================
+// 参考《万界道友》Daoyou 项目设计
 
-// 功法品质
+// 功法品质（8级品质体系）
 export const TECHNIQUE_QUALITIES = {
-  common: { name: '普通', color: '#9e9e9e', multiplier: 1 },
-  good: { name: '优秀', color: '#4caf50', multiplier: 1.5 },
-  rare: { name: '稀有', color: '#2196f3', multiplier: 2 },
-  epic: { name: '史诗', color: '#9c27b0', multiplier: 3 },
-  legendary: { name: '仙级', color: '#ff9800', multiplier: 5 }
+  common: { name: '凡品', color: '#9e9e9e', multiplier: 1, realmRange: [0, 0] },     // 炼气期
+  fine: { name: '灵品', color: '#4caf50', multiplier: 1.5, realmRange: [0, 1] },      // 炼气-筑基
+  rare: { name: '玄品', color: '#2196f3', multiplier: 2, realmRange: [1, 2] },        // 筑基-金丹
+  epic: { name: '真品', color: '#9c27b0', multiplier: 2.5, realmRange: [2, 3] },     // 金丹-元婴
+  excellent: { name: '地品', color: '#ff9800', multiplier: 3, realmRange: [3, 5] },  // 元婴-化神
+  superior: { name: '天品', color: '#00bcd4', multiplier: 4, realmRange: [5, 6] },   // 炼虚-合体
+  immortal: { name: '仙品', color: '#e91e63', multiplier: 5, realmRange: [6, 7] },    // 大乘
+  divine: { name: '神品', color: '#ffd700', multiplier: 8, realmRange: [7, 8] }      // 渡劫
 } as const
 
 export type TechniqueQualityId = keyof typeof TECHNIQUE_QUALITIES
 
-// 功法效果类型
+// 功法效果类型（参考 Daoyou 的词条体系）
 export type TechniqueEffectType = 
-  | 'attackBonus'     // 攻击力加成
-  | 'defenseBonus'    // 防御力加成
-  | 'hpBonus'         // 生命值加成
-  | 'critRate'        // 暴击率加成
-  | 'critDamage'      // 暴击伤害加成
-  | 'dodgeRate'       // 闪避率加成
-  | 'lifesteal'       // 吸血比例
-  | 'spiritPerSec'    // 灵气回复速度
-  | 'damageReduction' // 伤害减免
+  | 'attackBonus'       // 攻击力加成
+  | 'defenseBonus'      // 防御力加成
+  | 'hpBonus'           // 生命值加成（强体）
+  | 'critRate'          // 暴击率加成
+  | 'critDamage'        // 暴击伤害加成
+  | 'dodgeRate'         // 闪避率加成（身法）
+  | 'lifesteal'         // 吸血比例
+  | 'spiritPerSec'      // 灵气回复速度
+  | 'damageReduction'   // 伤害减免
+  | 'reflectDamage'     // 反弹伤害（镜像诀）
+  | 'regenPerSec'       // 每秒回复生命
 
 // 功法效果
 export interface TechniqueEffect {
@@ -1614,309 +1656,540 @@ export interface Technique {
   quality: TechniqueQualityId
   level: number            // 功法等级(1-10)
   effects: TechniqueEffect[]
-  description: string        // 功法描述
-  realmRequirement: number   // 境界要求
+  description: string      // 功法描述
+  realmRequirement: number // 境界要求
+  category: 'body' | 'spirit' | 'combat' | 'element' | 'ultimate'  // 功法类别
 }
 
-// 功法模板
+// 功法类别说明
+export const TECHNIQUE_CATEGORIES = {
+  body: { name: '炼体', icon: '💪', desc: '增强体魄，提升生命与防御' },
+  spirit: { name: '炼气', icon: '✨', desc: '吸纳灵气，加速修炼' },
+  combat: { name: '斗战', icon: '⚔️', desc: '增强战斗能力' },
+  element: { name: '五行', icon: '🌟', desc: '五行元素伤害加成' },
+  ultimate: { name: '大道', icon: '🔮', desc: '终极功法，全能加成' }
+}
+
+// 功法模板（参考 Daoyou 的功法词条设计理念）
 export const TECHNIQUE_TEMPLATES: Record<string, Omit<Technique, 'id'>> = {
-  // ==================== 普通品质功法（炼气期）====================
-  'basic_attack_1': {
-    name: '引气诀', quality: 'common', level: 1,
+
+  // ==================== 凡品功法（炼气期）====================
+  // 主词条：基础属性
+
+  'vitality_1': {
+    name: '强身诀', quality: 'common', level: 1, category: 'body',
     realmRequirement: 0,
-    description: '最基础的修炼法门，可小幅提升攻击力',
-    effects: [{ type: 'attackBonus', value: 5, description: '攻击力+5' }]
+    description: '最基础的炼体法门，锻炼体魄，增强生命力',
+    effects: [{ type: 'hpBonus', value: 50, description: '生命上限+50' }]
   },
-  'basic_defense_1': {
-    name: '护体术', quality: 'common', level: 1,
+  'spirit_1': {
+    name: '聚气诀', quality: 'common', level: 1, category: 'spirit',
     realmRequirement: 0,
-    description: '强身健体，提升防御能力',
-    effects: [{ type: 'defenseBonus', value: 3, description: '防御力+3' }]
-  },
-  'basic_hp_1': {
-    name: '强身诀', quality: 'common', level: 1,
-    realmRequirement: 0,
-    description: '锻炼体魄，增加生命上限',
-    effects: [{ type: 'hpBonus', value: 30, description: '生命上限+30' }]
-  },
-  'basic_crit_1': {
-    name: '破甲式', quality: 'common', level: 2,
-    realmRequirement: 0,
-    description: '专注要害，提高暴击率',
-    effects: [{ type: 'critRate', value: 2, description: '暴击率+2%' }]
-  },
-  'basic_dodge_1': {
-    name: '灵巧身法', quality: 'common', level: 2,
-    realmRequirement: 0,
-    description: '身法轻盈，提升闪避能力',
-    effects: [{ type: 'dodgeRate', value: 1, description: '闪避率+1%' }]
-  },
-  'spirit_recovery_1': {
-    name: '聚灵诀', quality: 'common', level: 3,
-    realmRequirement: 0,
-    description: '吸纳天地灵气，加速修炼',
+    description: '吸纳天地灵气，凝聚丹田气海',
     effects: [{ type: 'spiritPerSec', value: 0.5, description: '灵气+0.5/s' }]
   },
-
-  // ==================== 优秀品质功法（筑基期）====================
-  'advanced_attack_1': {
-    name: '青云剑气', quality: 'good', level: 5,
-    realmRequirement: 1,
-    description: '凝聚剑气，大幅提升攻击',
-    effects: [
-      { type: 'attackBonus', value: 15, description: '攻击力+15' },
-      { type: 'critRate', value: 3, description: '暴击率+3%' }
-    ]
+  'attack_1': {
+    name: '引气入体', quality: 'common', level: 1, category: 'combat',
+    realmRequirement: 0,
+    description: '将灵气引入体内，增强攻击之力',
+    effects: [{ type: 'attackBonus', value: 8, description: '攻击力+8' }]
   },
-  'advanced_defense_1': {
-    name: '玄铁护体', quality: 'good', level: 5,
-    realmRequirement: 1,
-    description: '防御坚固，难以击破',
-    effects: [
-      { type: 'defenseBonus', value: 10, description: '防御力+10' },
-      { type: 'damageReduction', value: 3, description: '伤害减免+3%' }
-    ]
+  'defense_1': {
+    name: '护体术', quality: 'common', level: 2, category: 'body',
+    realmRequirement: 0,
+    description: '凝聚灵气护住周身，抵御外邪入侵',
+    effects: [{ type: 'defenseBonus', value: 5, description: '防御力+5' }]
   },
-  'advanced_hp_1': {
-    name: '金刚不坏', quality: 'good', level: 6,
-    realmRequirement: 1,
-    description: '体若金刚，生机不绝',
-    effects: [
-      { type: 'hpBonus', value: 100, description: '生命上限+100' },
-      { type: 'lifesteal', value: 2, description: '吸血+2%' }
-    ]
+  'dodge_1': {
+    name: '灵巧身法', quality: 'common', level: 2, category: 'combat',
+    realmRequirement: 0,
+    description: '身形轻盈，灵巧闪避敌人攻击',
+    effects: [{ type: 'dodgeRate', value: 2, description: '闪避率+2%' }]
   },
-  'advanced_crit_1': {
-    name: '致命一击', quality: 'good', level: 6,
-    realmRequirement: 1,
-    description: '攻击附带致命效果',
-    effects: [
-      { type: 'critRate', value: 5, description: '暴击率+5%' },
-      { type: 'critDamage', value: 20, description: '暴击伤害+20%' }
-    ]
-  },
-  'spirit_surge_1': {
-    name: '灵气潮汐', quality: 'good', level: 7,
-    realmRequirement: 1,
-    description: '灵气如潮，源源不绝',
-    effects: [{ type: 'spiritPerSec', value: 1.5, description: '灵气+1.5/s' }]
-  },
-  'advanced_dodge_1': {
-    name: '幻影迷踪', quality: 'good', level: 7,
-    realmRequirement: 1,
-    description: '身形如影，难以捕捉',
-    effects: [
-      { type: 'dodgeRate', value: 3, description: '闪避率+3%' },
-      { type: 'defenseBonus', value: 5, description: '防御力+5' }
-    ]
+  'crit_1': {
+    name: '凝元功', quality: 'common', level: 3, category: 'combat',
+    realmRequirement: 0,
+    description: '凝聚元气于一点，专注攻击要害',
+    effects: [{ type: 'critRate', value: 3, description: '暴击率+3%' }]
   },
 
-  // ==================== 稀有品质功法（金丹期）====================
-  'expert_attack_1': {
-    name: '烈焰斩', quality: 'rare', level: 10,
-    realmRequirement: 2,
-    description: '凝聚烈焰之力，斩敌于千里之外',
+  // ==================== 灵品功法（炼气-筑基）====================
+  // 主词条+副词条组合
+
+  'vitality_2': {
+    name: '铜皮铁骨', quality: 'fine', level: 5, category: 'body',
+    realmRequirement: 0,
+    description: '皮如铜铁，骨若金刚，炼体入门功法',
     effects: [
-      { type: 'attackBonus', value: 35, description: '攻击力+35' },
-      { type: 'critRate', value: 5, description: '暴击率+5%' },
-      { type: 'critDamage', value: 30, description: '暴击伤害+30%' }
+      { type: 'hpBonus', value: 120, description: '生命上限+120' },
+      { type: 'defenseBonus', value: 10, description: '防御力+10' }
     ]
   },
-  'expert_defense_1': {
-    name: '不动如山', quality: 'rare', level: 10,
-    realmRequirement: 2,
-    description: '稳如磐石，万法不侵',
+  'spirit_2': {
+    name: '灵气潮汐', quality: 'fine', level: 5, category: 'spirit',
+    realmRequirement: 0,
+    description: '灵气如潮水般涌动，加速周天运转',
     effects: [
-      { type: 'defenseBonus', value: 25, description: '防御力+25' },
-      { type: 'damageReduction', value: 8, description: '伤害减免+8%' },
-      { type: 'hpBonus', value: 150, description: '生命上限+150' }
+      { type: 'spiritPerSec', value: 1.2, description: '灵气+1.2/s' },
+      { type: 'attackBonus', value: 5, description: '攻击力+5' }
     ]
   },
-  'expert_hp_1': {
-    name: '不灭金身', quality: 'rare', level: 11,
-    realmRequirement: 2,
-    description: '肉身不灭，生生不息',
+  'attack_2': {
+    name: '青云剑气', quality: 'fine', level: 6, category: 'combat',
+    realmRequirement: 1,
+    description: '剑气凝聚如青云，出手凌厉无匹',
     effects: [
-      { type: 'hpBonus', value: 250, description: '生命上限+250' },
-      { type: 'lifesteal', value: 5, description: '吸血+5%' },
-      { type: 'spiritPerSec', value: 1, description: '灵气+1/s' }
+      { type: 'attackBonus', value: 25, description: '攻击力+25' },
+      { type: 'critRate', value: 4, description: '暴击率+4%' }
     ]
   },
-  'expert_crit_1': {
-    name: '天罚之眼', quality: 'rare', level: 11,
-    realmRequirement: 2,
-    description: '洞察天机，一击必杀',
+  'defense_2': {
+    name: '玄铁护体', quality: 'fine', level: 6, category: 'body',
+    realmRequirement: 1,
+    description: '身披玄铁之甲，防御坚不可摧',
     effects: [
-      { type: 'critRate', value: 10, description: '暴击率+10%' },
-      { type: 'critDamage', value: 50, description: '暴击伤害+50%' },
-      { type: 'attackBonus', value: 20, description: '攻击力+20' }
+      { type: 'defenseBonus', value: 20, description: '防御力+20' },
+      { type: 'damageReduction', value: 4, description: '伤害减免+4%' }
     ]
   },
-  'spirit_absorption': {
-    name: '吞天噬地', quality: 'rare', level: 12,
-    realmRequirement: 2,
-    description: '吞噬天地灵气化为己用',
-    effects: [{ type: 'spiritPerSec', value: 3, description: '灵气+3/s' }]
-  },
-  'shadow_step': {
-    name: '虚空步', quality: 'rare', level: 12,
-    realmRequirement: 2,
-    description: '行走虚空，来去无踪',
+  'lifesteal_1': {
+    name: '吸灵大法', quality: 'fine', level: 7, category: 'combat',
+    realmRequirement: 1,
+    description: '吸取敌人灵气化为生机，回血能力强',
     effects: [
-      { type: 'dodgeRate', value: 6, description: '闪避率+6%' },
-      { type: 'defenseBonus', value: 15, description: '防御力+15' }
+      { type: 'lifesteal', value: 3, description: '吸血+3%' },
+      { type: 'hpBonus', value: 80, description: '生命上限+80' }
+    ]
+  },
+  'critdamage_1': {
+    name: '致命一击', quality: 'fine', level: 7, category: 'combat',
+    realmRequirement: 1,
+    description: '攻击附带致命效果，暴击伤害提升',
+    effects: [
+      { type: 'critRate', value: 3, description: '暴击率+3%' },
+      { type: 'critDamage', value: 25, description: '暴击伤害+25%' }
     ]
   },
 
-  // ==================== 史诗品质功法（元婴期-合体期）====================
-  'master_attack_1': {
-    name: '天雷破空', quality: 'epic', level: 15,
-    realmRequirement: 3,
-    description: '天雷降世，破灭苍穹',
+  // ==================== 玄品功法（筑基-金丹）====================
+  // 主词条+2个副词条
+
+  'body_master_1': {
+    name: '金刚不坏', quality: 'rare', level: 10, category: 'body',
+    realmRequirement: 1,
+    description: '体若金刚，坚不可摧，炼体小成',
     effects: [
-      { type: 'attackBonus', value: 80, description: '攻击力+80' },
-      { type: 'critRate', value: 8, description: '暴击率+8%' },
-      { type: 'critDamage', value: 60, description: '暴击伤害+60%' },
-      { type: 'lifesteal', value: 3, description: '吸血+3%' }
-    ]
-  },
-  'master_defense_1': {
-    name: '天罗万象', quality: 'epic', level: 15,
-    realmRequirement: 3,
-    description: '万象森罗，护体无疆',
-    effects: [
-      { type: 'defenseBonus', value: 60, description: '防御力+60' },
-      { type: 'damageReduction', value: 15, description: '伤害减免+15%' },
-      { type: 'hpBonus', value: 400, description: '生命上限+400' }
-    ]
-  },
-  'master_hp_1': {
-    name: '不死之身', quality: 'epic', level: 16,
-    realmRequirement: 3,
-    description: '滴血重生，永生不灭',
-    effects: [
-      { type: 'hpBonus', value: 600, description: '生命上限+600' },
-      { type: 'lifesteal', value: 10, description: '吸血+10%' },
-      { type: 'spiritPerSec', value: 2, description: '灵气+2/s' }
-    ]
-  },
-  'master_crit_1': {
-    name: '天诛地灭', quality: 'epic', level: 16,
-    realmRequirement: 3,
-    description: '天地同诛，毁灭一击',
-    effects: [
-      { type: 'critRate', value: 15, description: '暴击率+15%' },
-      { type: 'critDamage', value: 100, description: '暴击伤害+100%' },
-      { type: 'attackBonus', value: 50, description: '攻击力+50' }
-    ]
-  },
-  'celestial_dodge': {
-    name: '仙影迷踪', quality: 'epic', level: 17,
-    realmRequirement: 4,
-    description: '仙人步法，幻影难测',
-    effects: [
-      { type: 'dodgeRate', value: 10, description: '闪避率+10%' },
-      { type: 'defenseBonus', value: 40, description: '防御力+40' },
+      { type: 'hpBonus', value: 300, description: '生命上限+300' },
+      { type: 'defenseBonus', value: 35, description: '防御力+35' },
       { type: 'damageReduction', value: 5, description: '伤害减免+5%' }
     ]
   },
-  'celestial_spirit': {
-    name: '仙灵纳气', quality: 'epic', level: 17,
-    realmRequirement: 4,
-    description: '吸纳仙灵之气',
+  'spirit_master_1': {
+    name: '吞天噬地', quality: 'rare', level: 10, category: 'spirit',
+    realmRequirement: 1,
+    description: '吞噬天地灵气化为己用，修炼速度大增',
     effects: [
-      { type: 'spiritPerSec', value: 6, description: '灵气+6/s' },
-      { type: 'hpBonus', value: 300, description: '生命上限+300' }
+      { type: 'spiritPerSec', value: 2.5, description: '灵气+2.5/s' },
+      { type: 'attackBonus', value: 15, description: '攻击力+15' }
     ]
   },
-  'divine_shield': {
-    name: '神圣护佑', quality: 'epic', level: 18,
-    realmRequirement: 5,
-    description: '神光护体，万邪不侵',
+  'attack_master_1': {
+    name: '烈焰斩', quality: 'rare', level: 11, category: 'combat',
+    realmRequirement: 2,
+    description: '凝聚烈焰之力，斩敌于千里之外',
     effects: [
-      { type: 'defenseBonus', value: 80, description: '防御力+80' },
-      { type: 'damageReduction', value: 20, description: '伤害减免+20%' },
-      { type: 'hpBonus', value: 500, description: '生命上限+500' }
+      { type: 'attackBonus', value: 50, description: '攻击力+50' },
+      { type: 'critRate', value: 6, description: '暴击率+6%' },
+      { type: 'critDamage', value: 35, description: '暴击伤害+35%' }
+    ]
+  },
+  'defense_master_1': {
+    name: '不动如山', quality: 'rare', level: 11, category: 'body',
+    realmRequirement: 2,
+    description: '稳如磐石，万法不侵',
+    effects: [
+      { type: 'defenseBonus', value: 45, description: '防御力+45' },
+      { type: 'damageReduction', value: 10, description: '伤害减免+10%' },
+      { type: 'hpBonus', value: 200, description: '生命上限+200' }
+    ]
+  },
+  'dodge_master_1': {
+    name: '虚空步', quality: 'rare', level: 12, category: 'combat',
+    realmRequirement: 2,
+    description: '行走虚空，来去无踪',
+    effects: [
+      { type: 'dodgeRate', value: 8, description: '闪避率+8%' },
+      { type: 'defenseBonus', value: 20, description: '防御力+20' }
+    ]
+  },
+  'regen_1': {
+    name: '生生不息', quality: 'rare', level: 12, category: 'body',
+    realmRequirement: 2,
+    description: '生机绵绵不绝，每时每刻都在恢复',
+    effects: [
+      { type: 'regenPerSec', value: 5, description: '每秒回复+5' },
+      { type: 'lifesteal', value: 4, description: '吸血+4%' }
     ]
   },
 
-  // ==================== 仙级品质功法（渡劫期-人仙期）====================
-  'immortal_attack_1': {
-    name: '弑神诀', quality: 'legendary', level: 20,
-    realmRequirement: 6,
-    description: '弑杀神明之力，威能惊天动地',
+  // ==================== 真品功法（金丹-元婴）====================
+  // 高阶战斗功法
+
+  'body_advanced_1': {
+    name: '不灭金身', quality: 'epic', level: 15, category: 'body',
+    realmRequirement: 2,
+    description: '肉身不灭，滴血可重生，炼体大成',
     effects: [
-      { type: 'attackBonus', value: 200, description: '攻击力+200' },
-      { type: 'critRate', value: 15, description: '暴击率+15%' },
-      { type: 'critDamage', value: 150, description: '暴击伤害+150%' },
-      { type: 'lifesteal', value: 8, description: '吸血+8%' }
+      { type: 'hpBonus', value: 500, description: '生命上限+500' },
+      { type: 'lifesteal', value: 8, description: '吸血+8%' },
+      { type: 'regenPerSec', value: 8, description: '每秒回复+8' }
     ]
   },
-  'immortal_defense_1': {
-    name: '天道护体', quality: 'legendary', level: 20,
-    realmRequirement: 6,
-    description: '天道法则护体，金身不坏',
+  'spirit_advanced_1': {
+    name: '仙灵纳气', quality: 'epic', level: 15, category: 'spirit',
+    realmRequirement: 2,
+    description: '吸纳仙灵之气，修炼速度大幅提升',
     effects: [
-      { type: 'defenseBonus', value: 150, description: '防御力+150' },
-      { type: 'damageReduction', value: 30, description: '伤害减免+30%' },
-      { type: 'hpBonus', value: 1000, description: '生命上限+1000' },
+      { type: 'spiritPerSec', value: 5, description: '灵气+5/s' },
+      { type: 'hpBonus', value: 300, description: '生命上限+300' },
+      { type: 'attackBonus', value: 30, description: '攻击力+30' }
+    ]
+  },
+  'attack_advanced_1': {
+    name: '天雷破空', quality: 'epic', level: 16, category: 'combat',
+    realmRequirement: 3,
+    description: '天雷降世，破灭苍穹',
+    effects: [
+      { type: 'attackBonus', value: 100, description: '攻击力+100' },
+      { type: 'critRate', value: 10, description: '暴击率+10%' },
+      { type: 'critDamage', value: 80, description: '暴击伤害+80%' }
+    ]
+  },
+  'defense_advanced_1': {
+    name: '天罗万象', quality: 'epic', level: 16, category: 'body',
+    realmRequirement: 3,
+    description: '万象森罗，护体无疆',
+    effects: [
+      { type: 'defenseBonus', value: 80, description: '防御力+80' },
+      { type: 'damageReduction', value: 18, description: '伤害减免+18%' },
+      { type: 'hpBonus', value: 400, description: '生命上限+400' }
+    ]
+  },
+  'crit_master_1': {
+    name: '天诛地灭', quality: 'epic', level: 17, category: 'combat',
+    realmRequirement: 3,
+    description: '天地同诛，毁灭一击',
+    effects: [
+      { type: 'critRate', value: 18, description: '暴击率+18%' },
+      { type: 'critDamage', value: 120, description: '暴击伤害+120%' },
+      { type: 'attackBonus', value: 60, description: '攻击力+60' }
+    ]
+  },
+  'reflect_1': {
+    name: '镜像诀', quality: 'epic', level: 17, category: 'body',
+    realmRequirement: 3,
+    description: '以彼之道还施彼身，被攻击时反弹伤害',
+    effects: [
+      { type: 'reflectDamage', value: 15, description: '反弹伤害+15%' },
+      { type: 'defenseBonus', value: 50, description: '防御力+50' },
+      { type: 'damageReduction', value: 8, description: '伤害减免+8%' }
+    ]
+  },
+  'dodge_advanced_1': {
+    name: '仙影迷踪', quality: 'epic', level: 18, category: 'combat',
+    realmRequirement: 4,
+    description: '仙人步法，幻影难测',
+    effects: [
+      { type: 'dodgeRate', value: 12, description: '闪避率+12%' },
+      { type: 'defenseBonus', value: 40, description: '防御力+40' },
+      { type: 'damageReduction', value: 6, description: '伤害减免+6%' }
+    ]
+  },
+  'lifesteal_advanced_1': {
+    name: '血魔大法', quality: 'epic', level: 18, category: 'combat',
+    realmRequirement: 4,
+    description: '吸血为生，战意越强，吸血越多',
+    effects: [
+      { type: 'lifesteal', value: 15, description: '吸血+15%' },
+      { type: 'attackBonus', value: 50, description: '攻击力+50' },
+      { type: 'hpBonus', value: 250, description: '生命上限+250' }
+    ]
+  },
+
+  // ==================== 地品功法（元婴-化神）====================
+  // 五行元素功法
+
+  'fire_essence': {
+    name: '火灵诀', quality: 'excellent', level: 20, category: 'element',
+    realmRequirement: 3,
+    description: '凝聚火灵之气，灼烧敌人',
+    effects: [
+      { type: 'attackBonus', value: 120, description: '攻击力+120' },
+      { type: 'critRate', value: 8, description: '暴击率+8%' },
+      { type: 'critDamage', value: 60, description: '暴击伤害+60%' }
+    ]
+  },
+  'thunder_essence': {
+    name: '雷神诀', quality: 'excellent', level: 20, category: 'element',
+    realmRequirement: 3,
+    description: '引动天雷之力，雷霆万钧',
+    effects: [
+      { type: 'attackBonus', value: 110, description: '攻击力+110' },
+      { type: 'critRate', value: 12, description: '暴击率+12%' },
+      { type: 'critDamage', value: 50, description: '暴击伤害+50%' }
+    ]
+  },
+  'ice_essence': {
+    name: '冰魄诀', quality: 'excellent', level: 21, category: 'element',
+    realmRequirement: 4,
+    description: '凝练冰魄真气，冰封万物',
+    effects: [
+      { type: 'defenseBonus', value: 100, description: '防御力+100' },
+      { type: 'damageReduction', value: 15, description: '伤害减免+15%' },
       { type: 'dodgeRate', value: 5, description: '闪避率+5%' }
     ]
   },
-  'immortal_hp_1': {
-    name: '长生诀', quality: 'legendary', level: 21,
-    realmRequirement: 6,
-    description: '长生不老，与天地同寿',
+  'wind_essence': {
+    name: '风之精髓', quality: 'excellent', level: 21, category: 'element',
+    realmRequirement: 4,
+    description: '御风而行，快如闪电',
     effects: [
-      { type: 'hpBonus', value: 1500, description: '生命上限+1500' },
-      { type: 'lifesteal', value: 20, description: '吸血+20%' },
-      { type: 'spiritPerSec', value: 5, description: '灵气+5/s' }
+      { type: 'dodgeRate', value: 15, description: '闪避率+15%' },
+      { type: 'attackBonus', value: 80, description: '攻击力+80' },
+      { type: 'critRate', value: 6, description: '暴击率+6%' }
     ]
   },
-  'immortal_crit_1': {
-    name: '天罚神雷', quality: 'legendary', level: 21,
-    realmRequirement: 7,
+  'earth_essence': {
+    name: '地之精髓', quality: 'excellent', level: 22, category: 'element',
+    realmRequirement: 4,
+    description: '大地之力，厚重如山',
+    effects: [
+      { type: 'hpBonus', value: 800, description: '生命上限+800' },
+      { type: 'defenseBonus', value: 80, description: '防御力+80' },
+      { type: 'damageReduction', value: 12, description: '伤害减免+12%' }
+    ]
+  },
+  'metal_essence': {
+    name: '金之精髓', quality: 'excellent', level: 22, category: 'element',
+    realmRequirement: 5,
+    description: '金气淬体，锋芒毕露',
+    effects: [
+      { type: 'attackBonus', value: 150, description: '攻击力+150' },
+      { type: 'critDamage', value: 80, description: '暴击伤害+80%' },
+      { type: 'critRate', value: 5, description: '暴击率+5%' }
+    ]
+  },
+  'wood_essence': {
+    name: '木之精髓', quality: 'excellent', level: 23, category: 'element',
+    realmRequirement: 5,
+    description: '木灵生气，生生不息',
+    effects: [
+      { type: 'regenPerSec', value: 15, description: '每秒回复+15' },
+      { type: 'lifesteal', value: 10, description: '吸血+10%' },
+      { type: 'hpBonus', value: 500, description: '生命上限+500' }
+    ]
+  },
+  'ultimate_body': {
+    name: '不死之身', quality: 'excellent', level: 24, category: 'ultimate',
+    realmRequirement: 5,
+    description: '滴血重生，永生不灭',
+    effects: [
+      { type: 'hpBonus', value: 1000, description: '生命上限+1000' },
+      { type: 'lifesteal', value: 20, description: '吸血+20%' },
+      { type: 'regenPerSec', value: 20, description: '每秒回复+20' },
+      { type: 'damageReduction', value: 10, description: '伤害减免+10%' }
+    ]
+  },
+
+  // ==================== 天品功法（炼虚-合体）====================
+  // 高阶功法
+
+  'attack_superior': {
+    name: '弑神诀', quality: 'superior', level: 25, category: 'combat',
+    realmRequirement: 5,
+    description: '弑杀神明之力，威能惊天动地',
+    effects: [
+      { type: 'attackBonus', value: 250, description: '攻击力+250' },
+      { type: 'critRate', value: 15, description: '暴击率+15%' },
+      { type: 'critDamage', value: 180, description: '暴击伤害+180%' },
+      { type: 'lifesteal', value: 10, description: '吸血+10%' }
+    ]
+  },
+  'defense_superior': {
+    name: '天道护体', quality: 'superior', level: 25, category: 'body',
+    realmRequirement: 5,
+    description: '天道法则护体，金身不坏',
+    effects: [
+      { type: 'defenseBonus', value: 180, description: '防御力+180' },
+      { type: 'damageReduction', value: 28, description: '伤害减免+28%' },
+      { type: 'hpBonus', value: 1200, description: '生命上限+1200' },
+      { type: 'dodgeRate', value: 8, description: '闪避率+8%' }
+    ]
+  },
+  'spirit_superior': {
+    name: '太初混沌', quality: 'superior', level: 26, category: 'spirit',
+    realmRequirement: 6,
+    description: '太初混沌之气，蕴含无穷伟力',
+    effects: [
+      { type: 'spiritPerSec', value: 12, description: '灵气+12/s' },
+      { type: 'attackBonus', value: 100, description: '攻击力+100' },
+      { type: 'defenseBonus', value: 100, description: '防御力+100' },
+      { type: 'hpBonus', value: 600, description: '生命上限+600' }
+    ]
+  },
+  'ultimate_attack': {
+    name: '天罚神雷', quality: 'superior', level: 27, category: 'combat',
+    realmRequirement: 6,
     description: '神雷降世，天罚无敌',
     effects: [
       { type: 'critRate', value: 25, description: '暴击率+25%' },
-      { type: 'critDamage', value: 200, description: '暴击伤害+200%' },
-      { type: 'attackBonus', value: 120, description: '攻击力+120' }
+      { type: 'critDamage', value: 250, description: '暴击伤害+250%' },
+      { type: 'attackBonus', value: 180, description: '攻击力+180' }
     ]
   },
-  'immortal_spirit_1': {
-    name: '太初混沌', quality: 'legendary', level: 22,
-    realmRequirement: 7,
-    description: '太初混沌之气，蕴含无穷伟力',
+  'ultimate_dodge': {
+    name: '大虚空术', quality: 'superior', level: 28, category: 'combat',
+    realmRequirement: 6,
+    description: '穿梭虚空，来去自如',
     effects: [
-      { type: 'spiritPerSec', value: 15, description: '灵气+15/s' },
-      { type: 'attackBonus', value: 80, description: '攻击力+80' },
+      { type: 'dodgeRate', value: 22, description: '闪避率+22%' },
+      { type: 'damageReduction', value: 18, description: '伤害减免+18%' },
       { type: 'defenseBonus', value: 80, description: '防御力+80' }
     ]
   },
-  'immortal_dodge_1': {
-    name: '大虚空术', quality: 'legendary', level: 22,
-    realmRequirement: 7,
-    description: '穿梭虚空，来去自如',
+  'ultimate_spirit': {
+    name: '万灵归元', quality: 'superior', level: 29, category: 'spirit',
+    realmRequirement: 6,
+    description: '万灵归一，返璞归真',
     effects: [
-      { type: 'dodgeRate', value: 18, description: '闪避率+18%' },
-      { type: 'damageReduction', value: 15, description: '伤害减免+15%' },
-      { type: 'defenseBonus', value: 60, description: '防御力+60' }
+      { type: 'spiritPerSec', value: 20, description: '灵气+20/s' },
+      { type: 'hpBonus', value: 800, description: '生命上限+800' },
+      { type: 'attackBonus', value: 80, description: '攻击力+80' },
+      { type: 'regenPerSec', value: 15, description: '每秒回复+15' }
     ]
   },
-  'ultimate_power': {
-    name: '大道归一', quality: 'legendary', level: 25,
-    realmRequirement: 8,
-    description: '万法归一，大道至简',
+
+  // ==================== 仙品功法（大乘期）====================
+  // 仙级功法
+
+  'immortal_attack': {
+    name: '天帝诀', quality: 'immortal', level: 30, category: 'ultimate',
+    realmRequirement: 6,
+    description: '天帝所创功法，威压万界',
     effects: [
-      { type: 'attackBonus', value: 300, description: '攻击力+300' },
-      { type: 'defenseBonus', value: 200, description: '防御力+200' },
-      { type: 'hpBonus', value: 2000, description: '生命上限+2000' },
+      { type: 'attackBonus', value: 400, description: '攻击力+400' },
       { type: 'critRate', value: 20, description: '暴击率+20%' },
-      { type: 'critDamage', value: 150, description: '暴击伤害+150%' },
-      { type: 'damageReduction', value: 25, description: '伤害减免+25%' },
-      { type: 'lifesteal', value: 15, description: '吸血+15%' },
-      { type: 'dodgeRate', value: 10, description: '闪避率+10%' },
-      { type: 'spiritPerSec', value: 10, description: '灵气+10/s' }
+      { type: 'critDamage', value: 300, description: '暴击伤害+300%' },
+      { type: 'lifesteal', value: 18, description: '吸血+18%' }
+    ]
+  },
+  'immortal_defense': {
+    name: '天罗地网', quality: 'immortal', level: 30, category: 'body',
+    realmRequirement: 6,
+    description: '天罗地网，无处可逃，无物可破',
+    effects: [
+      { type: 'defenseBonus', value: 300, description: '防御力+300' },
+      { type: 'damageReduction', value: 35, description: '伤害减免+35%' },
+      { type: 'hpBonus', value: 2000, description: '生命上限+2000' },
+      { type: 'dodgeRate', value: 10, description: '闪避率+10%' }
+    ]
+  },
+  'immortal_body': {
+    name: '不灭仙体', quality: 'immortal', level: 31, category: 'ultimate',
+    realmRequirement: 7,
+    description: '成就不灭仙体，与天地同寿',
+    effects: [
+      { type: 'hpBonus', value: 3000, description: '生命上限+3000' },
+      { type: 'lifesteal', value: 30, description: '吸血+30%' },
+      { type: 'regenPerSec', value: 40, description: '每秒回复+40' },
+      { type: 'damageReduction', value: 20, description: '伤害减免+20%' }
+    ]
+  },
+  'immortal_spirit': {
+    name: '混沌归元', quality: 'immortal', level: 32, category: 'spirit',
+    realmRequirement: 7,
+    description: '混沌初开，万气归元',
+    effects: [
+      { type: 'spiritPerSec', value: 30, description: '灵气+30/s' },
+      { type: 'attackBonus', value: 200, description: '攻击力+200' },
+      { type: 'defenseBonus', value: 150, description: '防御力+150' },
+      { type: 'hpBonus', value: 1500, description: '生命上限+1500' }
+    ]
+  },
+  'immortal_crit': {
+    name: '灭世神罚', quality: 'immortal', level: 33, category: 'combat',
+    realmRequirement: 7,
+    description: '神罚降临，灭世一击',
+    effects: [
+      { type: 'critRate', value: 35, description: '暴击率+35%' },
+      { type: 'critDamage', value: 400, description: '暴击伤害+400%' },
+      { type: 'attackBonus', value: 300, description: '攻击力+300' }
+    ]
+  },
+
+  // ==================== 神品功法（渡劫期）====================
+  // 终极功法
+
+  'divine_attack': {
+    name: '大道独尊', quality: 'divine', level: 35, category: 'ultimate',
+    realmRequirement: 7,
+    description: '大道独尊，唯我独仙',
+    effects: [
+      { type: 'attackBonus', value: 600, description: '攻击力+600' },
+      { type: 'critRate', value: 25, description: '暴击率+25%' },
+      { type: 'critDamage', value: 500, description: '暴击伤害+500%' },
+      { type: 'lifesteal', value: 25, description: '吸血+25%' }
+    ]
+  },
+  'divine_defense': {
+    name: '万劫不灭', quality: 'divine', level: 35, category: 'ultimate',
+    realmRequirement: 7,
+    description: '万劫加身而不灭，永生不灭',
+    effects: [
+      { type: 'defenseBonus', value: 450, description: '防御力+450' },
+      { type: 'damageReduction', value: 45, description: '伤害减免+45%' },
+      { type: 'hpBonus', value: 4000, description: '生命上限+4000' },
+      { type: 'reflectDamage', value: 30, description: '反弹伤害+30%' }
+    ]
+  },
+  'divine_body': {
+    name: '神魂不灭', quality: 'divine', level: 36, category: 'ultimate',
+    realmRequirement: 8,
+    description: '神魂永存，肉身不朽',
+    effects: [
+      { type: 'hpBonus', value: 5000, description: '生命上限+5000' },
+      { type: 'lifesteal', value: 40, description: '吸血+40%' },
+      { type: 'regenPerSec', value: 80, description: '每秒回复+80' },
+      { type: 'damageReduction', value: 25, description: '伤害减免+25%' }
+    ]
+  },
+  'divine_spirit': {
+    name: '永恒真仙', quality: 'divine', level: 38, category: 'ultimate',
+    realmRequirement: 8,
+    description: '永恒真仙，万古长存',
+    effects: [
+      { type: 'spiritPerSec', value: 50, description: '灵气+50/s' },
+      { type: 'attackBonus', value: 400, description: '攻击力+400' },
+      { type: 'defenseBonus', value: 300, description: '防御力+300' },
+      { type: 'hpBonus', value: 3000, description: '生命上限+3000' },
+      { type: 'critRate', value: 20, description: '暴击率+20%' }
+    ]
+  },
+  'ultimate_divine': {
+    name: '大道归一', quality: 'divine', level: 40, category: 'ultimate',
+    realmRequirement: 8,
+    description: '万法归一，大道至简，超脱一切',
+    effects: [
+      { type: 'attackBonus', value: 800, description: '攻击力+800' },
+      { type: 'defenseBonus', value: 500, description: '防御力+500' },
+      { type: 'hpBonus', value: 6000, description: '生命上限+6000' },
+      { type: 'critRate', value: 30, description: '暴击率+30%' },
+      { type: 'critDamage', value: 600, description: '暴击伤害+600%' },
+      { type: 'damageReduction', value: 35, description: '伤害减免+35%' },
+      { type: 'lifesteal', value: 30, description: '吸血+30%' },
+      { type: 'dodgeRate', value: 20, description: '闪避率+20%' },
+      { type: 'spiritPerSec', value: 30, description: '灵气+30/s' },
+      { type: 'regenPerSec', value: 50, description: '每秒回复+50' }
     ]
   }
 }
