@@ -34,7 +34,7 @@ function getEffectIcon(type: string) {
   const icons: Record<string, string> = {
     attackBonus: '⚔️', defenseBonus: '🛡️', hpBonus: '❤️', critRate: '💥',
     critDamage: '💫', dodgeRate: '💨', lifesteal: '🩸', spiritPerSec: '💎',
-    damageReduction: '🛡️'
+    damageReduction: '🔰', reflectDamage: '🔄', regenPerSec: '💚'
   }
   return icons[type] || '✨'
 }
@@ -42,10 +42,17 @@ function getEffectIcon(type: string) {
 function getEffectName(type: string) {
   const names: Record<string, string> = {
     attackBonus: '攻击', defenseBonus: '防御', hpBonus: '生命', critRate: '暴击率',
-    critDamage: '暴击伤害', dodgeRate: '闪避率', lifesteal: '吸血', spiritPerSec: '灵石/秒',
-    damageReduction: '减伤'
+    critDamage: '暴击伤害', dodgeRate: '闪避率', lifesteal: '吸血', spiritPerSec: '灵气/秒',
+    damageReduction: '减伤', reflectDamage: '反弹伤害', regenPerSec: '生命回复'
   }
   return names[type] || type
+}
+
+// 固定值 vs 百分比
+const FIXED_VALUE_TYPES = new Set(['attackBonus', 'defenseBonus', 'hpBonus', 'spiritPerSec', 'regenPerSec'])
+function formatEffectValue(type: string, value: number): string {
+  if (FIXED_VALUE_TYPES.has(type)) return `+${value}`
+  return `+${value}%`
 }
 
 // 套装信息
@@ -123,20 +130,22 @@ function unequipItem(slot: EquipmentType) {
 }
 
 function sellItem(item: Equipment) {
-  const prices = { common: 10, good: 30, rare: 80, epic: 200, legendary: 500 }
+  const prices: Record<string, number> = { common: 10, good: 30, rare: 80, epic: 200, legendary: 800 }
   const price = prices[item.quality] || 10
-  
+  // 套装装备价格更高
+  const finalPrice = item.setId ? price * 2 : price
+
   ElMessageBox.confirm(
-    `确定出售 ${item.name} 获得 ${price} 灵石？`,
+    `确定出售 ${item.name}${item.setId ? '【套装】' : ''} 获得 ${finalPrice} 灵石？`,
     '出售确认',
     { confirmButtonText: '出售', cancelButtonText: '取消', type: 'warning' }
   ).then(() => {
-    playerStore.addSpiritStones(price)
+    playerStore.addSpiritStones(finalPrice)
     const idx = player.value!.inventory.findIndex(i => i.id === item.id)
     if (idx > -1) {
       player.value!.inventory.splice(idx, 1)
     }
-    ElMessage.success(`获得 ${price} 灵石`)
+    ElMessage.success(`获得 ${finalPrice} 灵石`)
   }).catch(() => {})
 }
 
@@ -171,48 +180,65 @@ function getPetGradeStars(grade: number) {
   return '⭐'.repeat(grade)
 }
 
-// ==================== 一键出售功能 ====================
+// ==================== 一键出售功能（优化版） ====================
 const sellQuality = ref<string>('')
 
-const qualityOptions = [
+// 出售分类选项 - 拆分仙器和套装
+const sellCategories = [
+  { key: 'all', name: '全部', color: '#ffffff', icon: '📦' },
   { key: 'common', name: '普通', color: '#9e9e9e', price: 10 },
   { key: 'good', name: '优秀', color: '#4caf50', price: 30 },
   { key: 'rare', name: '稀有', color: '#2196f3', price: 80 },
   { key: 'epic', name: '史诗', color: '#9c27b0', price: 200 },
-  { key: 'legendary', name: '仙器', color: '#ff9800', price: 500 }
+  { key: 'legendary', name: '仙器', color: '#ff9800', price: 500, filter: (item: Equipment) => item.quality === 'legendary' && !item.setId },
+  { key: 'legendary_set', name: '套装', color: '#ffd700', price: 1000, filter: (item: Equipment) => item.quality === 'legendary' && !!item.setId }
 ]
 
-// 计算选中品质的物品
-const qualityItems = computed(() => {
+// 计算选中分类的物品
+const sellCategoryItems = computed(() => {
   if (!sellQuality.value) return []
+  if (sellQuality.value === 'all') return inventory.value
+  const category = sellCategories.find(c => c.key === sellQuality.value)
+  if (!category) return []
+  if ('filter' in category && category.filter) {
+    return inventory.value.filter(category.filter as (item: Equipment) => boolean)
+  }
   return inventory.value.filter(item => item.quality === sellQuality.value)
 })
 
 // 计算选中物品的总价值
-const qualityTotalPrice = computed(() => {
-  const priceMap: Record<string, number> = {
-    common: 10, good: 30, rare: 80, epic: 200, legendary: 500
-  }
-  return qualityItems.value.length * (priceMap[sellQuality.value] || 10)
+const sellTotalPrice = computed(() => {
+  let total = 0
+  sellCategoryItems.value.forEach(item => {
+    let price = 10
+    if (item.quality === 'common') price = 10
+    else if (item.quality === 'good') price = 30
+    else if (item.quality === 'rare') price = 80
+    else if (item.quality === 'epic') price = 200
+    else if (item.quality === 'legendary') price = item.setId ? 1000 : 500
+    total += price
+  })
+  return total
 })
 
-function sellByQuality() {
-  if (!sellQuality.value || qualityItems.value.length === 0) {
-    ElMessage.warning('请先选择要出售的品质')
+function sellByCategory() {
+  if (!sellQuality.value || sellCategoryItems.value.length === 0) {
+    ElMessage.warning('请先选择要出售的分类')
     return
   }
-  
-  const qualityName = QUALITIES[sellQuality.value as keyof typeof QUALITIES]?.name || sellQuality.value
-  const count = qualityItems.value.length
-  const totalPrice = qualityTotalPrice.value
-  
+
+  const category = sellCategories.find(c => c.key === sellQuality.value)
+  const categoryName = category ? ('name' in category ? category.name : '全部') : ''
+  const count = sellCategoryItems.value.length
+  const totalPrice = sellTotalPrice.value
+
   ElMessageBox.confirm(
-    `确定出售 ${count} 件${qualityName}品质装备，获得 ${totalPrice} 灵石？`,
+    `确定出售 ${count} 件${categoryName}装备，获得 ${totalPrice} 灵石？`,
     '一键出售确认',
     { confirmButtonText: '确认出售', cancelButtonText: '取消', type: 'warning' }
   ).then(() => {
-    // 移除所有选中品质的物品
-    const toSell = [...qualityItems.value]
+    // 移除所有选中分类的物品
+    const toSell = [...sellCategoryItems.value]
     toSell.forEach(item => {
       const idx = player.value!.inventory.findIndex(i => i.id === item.id)
       if (idx > -1) {
@@ -225,8 +251,122 @@ function sellByQuality() {
   }).catch(() => {})
 }
 
-function selectQualityForSell(quality: string) {
-  sellQuality.value = sellQuality.value === quality ? '' : quality
+// 一键出售全部（排除仙器和套装）
+function sellAllExceptLegendary() {
+  const toSell = inventory.value.filter(item =>
+    item.quality !== 'legendary'
+  )
+
+  if (toSell.length === 0) {
+    ElMessage.info('没有可出售的装备')
+    return
+  }
+
+  let totalPrice = 0
+  toSell.forEach(item => {
+    let price = 10
+    if (item.quality === 'common') price = 10
+    else if (item.quality === 'good') price = 30
+    else if (item.quality === 'rare') price = 80
+    else if (item.quality === 'epic') price = 200
+    totalPrice += price
+  })
+
+  ElMessageBox.confirm(
+    `确定出售 ${toSell.length} 件装备（排除仙器和套装），获得 ${totalPrice} 灵石？`,
+    '一键出售确认',
+    { confirmButtonText: '确认出售', cancelButtonText: '取消', type: 'warning' }
+  ).then(() => {
+    toSell.forEach(item => {
+      const idx = player.value!.inventory.findIndex(i => i.id === item.id)
+      if (idx > -1) {
+        player.value!.inventory.splice(idx, 1)
+      }
+    })
+    playerStore.addSpiritStones(totalPrice)
+    ElMessage.success(`已出售 ${toSell.length} 件装备，获得 ${totalPrice} 灵石`)
+  }).catch(() => {})
+}
+
+function selectCategoryForSell(key: string) {
+  sellQuality.value = sellQuality.value === key ? '' : key
+}
+
+// ==================== 装备强化功能 ====================
+const enhancingItem = ref<Equipment | null>(null)
+
+function getEnhancementCost(level: number): number {
+  return playerStore.getEnhancementCost(level)
+}
+
+function getEnhancementMultiplier(level: number): number {
+  return playerStore.getEnhancementMultiplier(level)
+}
+
+function getEnhancedBonus(item: Equipment): { attack: number; defense: number; hp: number } {
+  const level = item.enhancementLevel || 0
+  const multiplier = getEnhancementMultiplier(level)
+  return {
+    attack: Math.floor(item.attackBonus * multiplier),
+    defense: Math.floor(item.defenseBonus * multiplier),
+    hp: Math.floor(item.hpBonus * multiplier)
+  }
+}
+
+function openEnhanceDialog(item: Equipment) {
+  enhancingItem.value = item
+}
+
+function closeEnhanceDialog() {
+  enhancingItem.value = null
+}
+
+function enhanceItem() {
+  if (!enhancingItem.value) return
+
+  const item = enhancingItem.value
+  const currentLevel = item.enhancementLevel || 0
+  const cost = getEnhancementCost(currentLevel)
+
+  if (player.value!.spiritStones < cost) {
+    ElMessage.warning(`灵石不足！需要 ${cost} 灵石，当前拥有 ${player.value!.spiritStones} 灵石`)
+    return
+  }
+
+  // 检查装备是否在背包中
+  const inventoryIndex = player.value!.inventory.findIndex(i => i.id === item.id)
+  const fromInventory = inventoryIndex > -1
+
+  const result = playerStore.enhanceEquipment(item.id, fromInventory)
+
+  if (result.success) {
+    ElMessage.success(result.message)
+    closeEnhanceDialog()
+  } else {
+    ElMessage.error(result.message)
+  }
+}
+
+function enhanceEquippedItem(slotKey: string) {
+  // 从已装备中获取
+  const equipment = player.value!.equipment as Record<string, Equipment | null>
+  const item = equipment[slotKey]
+  if (!item) return
+
+  const currentLevel = item.enhancementLevel || 0
+  const cost = getEnhancementCost(currentLevel)
+
+  if (player.value!.spiritStones < cost) {
+    ElMessage.warning(`灵石不足！需要 ${cost} 灵石，当前拥有 ${player.value!.spiritStones} 灵石`)
+    return
+  }
+
+  const result = playerStore.enhanceEquipment(item.id, false)
+  if (result.success) {
+    ElMessage.success(result.message)
+  } else {
+    ElMessage.error(result.message)
+  }
 }
 </script>
 
@@ -439,35 +579,49 @@ function selectQualityForSell(quality: string) {
 
       <!-- 一键出售区域 -->
       <div class="quick-sell-section">
-        <div class="quick-sell-title">💰 按品质出售</div>
-        <div class="quality-sell-buttons">
+        <div class="quick-sell-header">
+          <div class="quick-sell-title">💰 一键出售</div>
+          <el-button type="info" size="small" plain @click="sellAllExceptLegendary" v-if="inventory.filter(i => i.quality !== 'legendary').length > 0">
+            出售全部非仙器
+          </el-button>
+        </div>
+
+        <div class="category-sell-buttons">
           <button
-            v-for="q in qualityOptions"
-            :key="q.key"
-            class="quality-sell-btn"
-            :class="{ active: sellQuality === q.key }"
+            v-for="cat in sellCategories"
+            :key="cat.key"
+            class="category-sell-btn"
+            :class="{ active: sellQuality === cat.key }"
             :style="{
-              '--quality-color': q.color,
-              borderColor: sellQuality === q.key ? q.color : 'transparent'
+              '--cat-color': cat.color,
+              borderColor: sellQuality === cat.key ? cat.color : 'transparent'
             }"
-            @click="selectQualityForSell(q.key)"
+            @click="selectCategoryForSell(cat.key)"
           >
-            <span class="quality-dot" :style="{ background: q.color }"></span>
-            <span class="quality-label">{{ q.name }}</span>
-            <span class="quality-count">({{ inventory.filter(i => i.quality === q.key).length }})</span>
+            <span class="cat-icon">{{ 'icon' in cat ? cat.icon : '' }}</span>
+            <span class="cat-name">{{ cat.name }}</span>
+            <span class="cat-count">
+              {{ cat.key === 'all'
+                ? inventory.length
+                : sellCategories.find(c => c.key === cat.key)?.key === 'legendary_set'
+                  ? inventory.filter((i: Equipment) => i.quality === 'legendary' && !!i.setId).length
+                  : inventory.filter((i: Equipment) => cat.key === 'legendary' ? (i.quality === 'legendary' && !i.setId) : i.quality === cat.key).length
+              }}
+            </span>
           </button>
         </div>
-        <div class="sell-action" v-if="sellQuality && qualityItems.length > 0">
+
+        <div class="sell-action" v-if="sellQuality && sellCategoryItems.length > 0">
           <span class="sell-preview">
-            将出售 <strong :style="{ color: QUALITIES[sellQuality as keyof typeof QUALITIES]?.color }">{{ qualityItems.length }}</strong> 件装备
-            获得 <strong style="color: var(--accent-gold)">{{ qualityTotalPrice }}</strong> 灵石
+            将出售 <strong :style="{ color: sellCategories.find(c => c.key === sellQuality)?.color || '#fff' }">{{ sellCategoryItems.length }}</strong> 件装备
+            获得 <strong style="color: var(--accent-gold)">{{ sellTotalPrice }}</strong> 灵石
           </span>
-          <el-button type="danger" size="small" @click="sellByQuality">
+          <el-button type="danger" size="small" @click="sellByCategory">
             确认出售
           </el-button>
         </div>
-        <div class="sell-hint" v-else-if="sellQuality && qualityItems.length === 0">
-          <span class="no-items">该品质没有可出售的装备</span>
+        <div class="sell-hint" v-else-if="sellQuality && sellCategoryItems.length === 0">
+          <span class="no-items">该分类没有可出售的装备</span>
         </div>
       </div>
 
@@ -490,13 +644,13 @@ function selectQualityForSell(quality: string) {
       </div>
 
       <div class="inventory-grid" v-if="filteredInventory.length > 0">
-        <div 
-          v-for="item in filteredInventory" 
+        <div
+          v-for="item in filteredInventory"
           :key="item.id"
           class="inventory-item game-card"
-          :class="{ 'set-item': isSetEquipment(item) }"
-          :style="{ 
-            borderLeftColor: isSetEquipment(item) ? getSetColor(item.setId) : getQualityColor(item.quality) 
+          :class="{ 'set-item': isSetEquipment(item), 'enhanced': (item.enhancementLevel || 0) > 0 }"
+          :style="{
+            borderLeftColor: isSetEquipment(item) ? getSetColor(item.setId) : getQualityColor(item.quality)
           }"
         >
           <div class="item-header">
@@ -508,14 +662,26 @@ function selectQualityForSell(quality: string) {
             <span v-if="isSetEquipment(item)" class="set-tag" :style="{ color: getSetColor(item.setId) }">
               套装
             </span>
+            <span v-if="(item.enhancementLevel || 0) > 0" class="enhance-tag">
+              +{{ item.enhancementLevel }}
+            </span>
           </div>
           <div class="item-name" :style="{ color: getQualityColor(item.quality) }">
             {{ item.name }}
           </div>
           <div class="item-stats">
-            <span v-if="item.attackBonus > 0">⚔️ +{{ item.attackBonus }}</span>
-            <span v-if="item.defenseBonus > 0">🛡️ +{{ item.defenseBonus }}</span>
-            <span v-if="item.hpBonus > 0">❤️ +{{ item.hpBonus }}</span>
+            <span v-if="(item.enhancementLevel || 0) > 0" class="stat-enhanced">
+              ⚔️ +{{ getEnhancedBonus(item).attack }}
+            </span>
+            <span v-else-if="item.attackBonus > 0">⚔️ +{{ item.attackBonus }}</span>
+            <span v-if="(item.enhancementLevel || 0) > 0" class="stat-enhanced">
+              🛡️ +{{ getEnhancedBonus(item).defense }}
+            </span>
+            <span v-else-if="item.defenseBonus > 0">🛡️ +{{ item.defenseBonus }}</span>
+            <span v-if="(item.enhancementLevel || 0) > 0" class="stat-enhanced">
+              ❤️ +{{ getEnhancedBonus(item).hp }}
+            </span>
+            <span v-else-if="item.hpBonus > 0">❤️ +{{ item.hpBonus }}</span>
           </div>
           <div class="item-set-name" v-if="isSetEquipment(item)">
             {{ getSetName(item.setId) }}
@@ -523,6 +689,9 @@ function selectQualityForSell(quality: string) {
           <div class="item-actions">
             <el-button size="small" type="primary" @click="equipItem(item)">
               装备
+            </el-button>
+            <el-button size="small" type="warning" @click="openEnhanceDialog(item)">
+              强化
             </el-button>
             <el-button size="small" @click="sellItem(item)">
               出售
@@ -543,14 +712,17 @@ function selectQualityForSell(quality: string) {
         <h3 class="section-title">📜 功法（已装备 {{ equippedTechniques.length }}/3）</h3>
         <div class="technique-bonus-summary" v-if="Object.keys(techniqueBonuses).length > 0">
           <span class="bonus-label">功法加成：</span>
-          <span v-if="techniqueBonuses.attackBonus" class="bonus-chip">⚔️+{{ techniqueBonuses.attackBonus }}%</span>
-          <span v-if="techniqueBonuses.defenseBonus" class="bonus-chip">🛡️+{{ techniqueBonuses.defenseBonus }}%</span>
-          <span v-if="techniqueBonuses.hpBonus" class="bonus-chip">❤️+{{ techniqueBonuses.hpBonus }}%</span>
-          <span v-if="techniqueBonuses.critRate" class="bonus-chip">💥+{{ techniqueBonuses.critRate }}%</span>
-          <span v-if="techniqueBonuses.critDamage" class="bonus-chip">💫+{{ techniqueBonuses.critDamage }}%</span>
-          <span v-if="techniqueBonuses.dodgeRate" class="bonus-chip">💨+{{ techniqueBonuses.dodgeRate }}%</span>
-          <span v-if="techniqueBonuses.lifesteal" class="bonus-chip">🩸+{{ techniqueBonuses.lifesteal }}%</span>
-          <span v-if="techniqueBonuses.damageReduction" class="bonus-chip">🛡️+{{ techniqueBonuses.damageReduction }}%</span>
+          <span v-if="techniqueBonuses.attackBonus" class="bonus-chip">⚔️攻击+{{ techniqueBonuses.attackBonus }}</span>
+          <span v-if="techniqueBonuses.defenseBonus" class="bonus-chip">🛡️防御+{{ techniqueBonuses.defenseBonus }}</span>
+          <span v-if="techniqueBonuses.hpBonus" class="bonus-chip">❤️生命+{{ techniqueBonuses.hpBonus }}</span>
+          <span v-if="techniqueBonuses.critRate" class="bonus-chip">💥暴击+{{ techniqueBonuses.critRate }}%</span>
+          <span v-if="techniqueBonuses.critDamage" class="bonus-chip">💫暴伤+{{ techniqueBonuses.critDamage }}%</span>
+          <span v-if="techniqueBonuses.dodgeRate" class="bonus-chip">💨闪避+{{ techniqueBonuses.dodgeRate }}%</span>
+          <span v-if="techniqueBonuses.lifesteal" class="bonus-chip">🩸吸血+{{ techniqueBonuses.lifesteal }}%</span>
+          <span v-if="techniqueBonuses.damageReduction" class="bonus-chip">🔰减伤+{{ techniqueBonuses.damageReduction }}%</span>
+          <span v-if="techniqueBonuses.reflectDamage" class="bonus-chip">🔄反弹+{{ techniqueBonuses.reflectDamage }}%</span>
+          <span v-if="techniqueBonuses.regenPerSec" class="bonus-chip">💚回复+{{ techniqueBonuses.regenPerSec }}/s</span>
+          <span v-if="techniqueBonuses.spiritPerSec" class="bonus-chip">💎灵气+{{ techniqueBonuses.spiritPerSec }}/s</span>
         </div>
       </div>
       
@@ -574,11 +746,11 @@ function selectQualityForSell(quality: string) {
           </div>
           <div class="technique-effects-mini">
             <span 
-              v-for="(effect, idx) in technique.effects.slice(0, 2)" 
+              v-for="(effect, idx) in technique.effects.slice(0, 2)"
               :key="idx"
               class="effect-badge"
             >
-              {{ getEffectIcon(effect.type) }}{{ effect.value >= 0 ? '+' : '' }}{{ effect.value }}%
+              {{ getEffectIcon(effect.type) }}{{ formatEffectValue(effect.type, effect.value) }}
             </span>
           </div>
           <div class="equipped-indicator">已装备 ✓</div>
@@ -607,11 +779,11 @@ function selectQualityForSell(quality: string) {
             </div>
             <div class="technique-effect-preview">
               <span 
-                v-for="(effect, idx) in technique.effects.slice(0, 1)" 
-                :key="idx"
-                class="effect-preview-badge"
-              >
-                {{ getEffectIcon(effect.type) }}{{ effect.value >= 0 ? '+' : '' }}{{ effect.value }}%
+              v-for="(effect, idx) in technique.effects.slice(0, 1)"
+              :key="idx"
+              class="effect-preview-badge"
+            >
+              {{ getEffectIcon(effect.type) }}{{ formatEffectValue(effect.type, effect.value) }}
               </span>
             </div>
           </div>
@@ -649,6 +821,85 @@ function selectQualityForSell(quality: string) {
         </div>
       </div>
     </div>
+
+    <!-- 强化对话框 -->
+    <el-dialog
+      v-model="enhancingItem !== null"
+      :title="enhancingItem ? `🔨 强化装备 - ${enhancingItem.name}` : '强化装备'"
+      width="400px"
+      @close="closeEnhanceDialog"
+    >
+      <div v-if="enhancingItem" class="enhance-dialog-content">
+        <div class="enhance-item-info">
+          <div class="enhance-item-name" :style="{ color: getQualityColor(enhancingItem.quality) }">
+            {{ enhancingItem.name }}
+            <span v-if="isSetEquipment(enhancingItem)" class="set-badge">【套装】</span>
+          </div>
+          <div class="enhance-item-type">{{ getEquipTypeName(enhancingItem.type) }}</div>
+        </div>
+
+        <div class="enhance-level-section">
+          <div class="current-level">
+            当前等级: <span class="level-badge">+{{ enhancingItem.enhancementLevel || 0 }}</span>
+          </div>
+          <div class="next-level">
+            强化后: <span class="level-badge next">+{{ (enhancingItem.enhancementLevel || 0) + 1 }}</span>
+          </div>
+        </div>
+
+        <div class="enhance-stats-preview">
+          <div class="stats-title">属性预览</div>
+          <div class="stats-row">
+            <span class="stat-label">⚔️ 攻击</span>
+            <span class="stat-current">+{{ enhancingItem.attackBonus }}</span>
+            <span class="stat-arrow">→</span>
+            <span class="stat-next">+{{ getEnhancedBonus(enhancingItem).attack }}</span>
+          </div>
+          <div class="stats-row">
+            <span class="stat-label">🛡️ 防御</span>
+            <span class="stat-current">+{{ enhancingItem.defenseBonus }}</span>
+            <span class="stat-arrow">→</span>
+            <span class="stat-next">+{{ getEnhancedBonus(enhancingItem).defense }}</span>
+          </div>
+          <div class="stats-row">
+            <span class="stat-label">❤️ 生命</span>
+            <span class="stat-current">+{{ enhancingItem.hpBonus }}</span>
+            <span class="stat-arrow">→</span>
+            <span class="stat-next">+{{ getEnhancedBonus(enhancingItem).hp }}</span>
+          </div>
+        </div>
+
+        <div class="enhance-cost-section">
+          <div class="cost-label">强化费用</div>
+          <div class="cost-value">
+            <span class="cost-icon">💎</span>
+            <span class="cost-amount">{{ getEnhancementCost(enhancingItem.enhancementLevel || 0) }}</span>
+            <span class="cost-unit">灵石</span>
+          </div>
+          <div class="player-stones">
+            拥有: {{ player.spiritStones }} 灵石
+          </div>
+        </div>
+
+        <div class="enhance-bonus-info">
+          <span class="bonus-icon">📈</span>
+          每级强化增加基础属性 <strong>10%</strong>
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="closeEnhanceDialog">取消</el-button>
+          <el-button
+            type="warning"
+            @click="enhanceItem"
+            :disabled="player.spiritStones < getEnhancementCost((enhancingItem?.enhancementLevel || 0))"
+          >
+            强化
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -909,6 +1160,64 @@ function selectQualityForSell(quality: string) {
   margin-bottom: 12px;
 }
 
+.quick-sell-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.quick-sell-header .quick-sell-title {
+  margin-bottom: 0;
+}
+
+.category-sell-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.category-sell-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  background: var(--bg-card);
+  border: 2px solid transparent;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.category-sell-btn:hover {
+  background: var(--bg-secondary);
+  transform: translateY(-1px);
+}
+
+.category-sell-btn.active {
+  background: rgba(255, 152, 0, 0.15);
+  color: var(--text-primary);
+}
+
+.cat-icon {
+  font-size: 0.9rem;
+}
+
+.cat-name {
+  font-weight: 500;
+}
+
+.cat-count {
+  font-size: 0.7rem;
+  opacity: 0.8;
+  background: var(--bg-secondary);
+  padding: 1px 5px;
+  border-radius: 8px;
+}
+
 .quick-sell-title {
   font-size: 0.85rem;
   font-weight: 500;
@@ -1061,6 +1370,25 @@ function selectQualityForSell(quality: string) {
   padding: 2px 6px;
   background: rgba(168, 85, 247, 0.2);
   border-radius: 8px;
+}
+
+.enhance-tag {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  border-radius: 8px;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.inventory-item.enhanced {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08) 0%, rgba(217, 119, 6, 0.08) 100%);
+}
+
+.stat-enhanced {
+  color: #f59e0b !important;
+  font-weight: 600;
 }
 
 .item-set-name {
@@ -1399,5 +1727,161 @@ function selectQualityForSell(quality: string) {
 .pet-status.deployed {
   background: rgba(168, 85, 247, 0.2);
   color: #a855f7;
+}
+
+/* 强化对话框样式 */
+.enhance-dialog-content {
+  padding: 8px 0;
+}
+
+.enhance-item-info {
+  text-align: center;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px dashed var(--border-color);
+}
+
+.enhance-item-name {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.set-badge {
+  font-size: 0.8rem;
+  color: #a855f7;
+}
+
+.enhance-item-type {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.enhance-level-section {
+  display: flex;
+  justify-content: center;
+  gap: 30px;
+  margin-bottom: 20px;
+}
+
+.current-level, .next-level {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.level-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  font-weight: 600;
+  color: var(--accent-cyan);
+}
+
+.level-badge.next {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
+}
+
+.enhance-stats-preview {
+  background: var(--bg-secondary);
+  border-radius: 10px;
+  padding: 14px;
+  margin-bottom: 16px;
+}
+
+.stats-title {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  text-align: center;
+}
+
+.stats-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+  font-size: 0.9rem;
+}
+
+.stat-label {
+  width: 60px;
+  color: var(--text-secondary);
+}
+
+.stat-current {
+  color: var(--text-secondary);
+}
+
+.stat-arrow {
+  color: var(--accent-cyan);
+  margin: 0 4px;
+}
+
+.stat-next {
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+.enhance-cost-section {
+  text-align: center;
+  padding: 14px;
+  background: linear-gradient(135deg, rgba(255, 152, 0, 0.1) 0%, rgba(255, 87, 34, 0.1) 100%);
+  border-radius: 10px;
+  margin-bottom: 12px;
+}
+
+.cost-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+}
+
+.cost-value {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.cost-icon {
+  font-size: 1.2rem;
+}
+
+.cost-amount {
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--accent-gold);
+}
+
+.cost-unit {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.player-stones {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-top: 6px;
+}
+
+.enhance-bonus-info {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.bonus-icon {
+  font-size: 1rem;
+}
+
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
 }
 </style>

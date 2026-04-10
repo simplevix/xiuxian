@@ -4,8 +4,9 @@ import type { Player, Equipment, Pet, Artifact, EquipmentSlots, SetConfig, Techn
 import { REALMS, SET_CONFIGS, FORMATION_CONFIGS } from '@/types/game'
 import { generateId } from '@/utils/random'
 import { useAuthStore } from './auth'
+import { savePlayerData as saveToDB, loadPlayerData as loadFromDB, deletePlayerData as deleteFromDB, initSaveManager } from '@/utils/saveManager'
 
-const STORAGE_KEY = 'xiantu_player'
+const STORAGE_KEY = 'xiantu_player' // 保留作为 localStorage 兼容的 fallback
 
 export const usePlayerStore = defineStore('player', () => {
   const player = ref<Player | null>(null)
@@ -182,7 +183,7 @@ export const usePlayerStore = defineStore('player', () => {
     if (!player.value) return { setId: null, setConfig: null, piecesCount: 0, bonuses: [] }
     
     // 统计所有已装备的套装部件
-    const equippedItems = Object.values(player.value.equipment).filter(Boolean) as Equipment[]
+    const equippedItems = Object.values(player.value.equipment || {}).filter(Boolean) as Equipment[]
     const setPieces: Record<string, number> = {}
     
     for (const item of equippedItems) {
@@ -281,12 +282,35 @@ export const usePlayerStore = defineStore('player', () => {
       userId: userId,
       realmIndex: 0,
       realmLevel: 0,  // 境界进度（层数）
+      level: 1,       // 总等级
       hp: 100,
       maxHp: 100,
+      mp: 100,
+      maxMp: 100,
+      sp: 0,
+      maxSp: 100,
       attack: 10,
       defense: 5,
       spiritEnergy: 0,
       spiritStones: 50,
+      spiritRoot: Math.floor(Math.random() * 5) + 5,  // 随机5-10灵根
+      
+      // 战斗属性
+      critRate: 0.15,
+      critDamage: 1.8,
+      dodgeRate: 0.08,
+      hitRate: 0.95,
+      attackSpeed: 1,
+      lifesteal: 0,
+      damageReduction: 0,
+      reflectDamage: 0,
+      
+      // 修炼属性
+      wisdom: 10,
+      willpower: 10,
+      insight: 0,
+      maxInsight: 100,
+      
       equipment: {} as EquipmentSlots,
       inventory: [],
       artifacts: [],
@@ -298,10 +322,34 @@ export const usePlayerStore = defineStore('player', () => {
       techniques: [],     // 功法列表
       equippedTechniqueIds: [],  // 已装备功法
       formation: initialFormation,  // 初始阵法
-      unlockedFormations: [firstFormation.id]  // 已解锁的阵法
+      unlockedFormations: [firstFormation.id],  // 已解锁的阵法
+      
+      // Engine系统数据
+      buffs: [],
+      shields: [],
+      injuries: [],
+      learnedSkills: []
     }
+    
+    // 初始化游戏系统
+    initGameSystem()
+    
     startCultivation()
     saveGame()
+  }
+  
+  // 初始化游戏系统（Engine层）
+  function initGameSystem() {
+    if (!player.value) return
+    
+    // 动态导入Engine模块
+    import('@/engine').then(({ createPlayerGameSystem }) => {
+      if (player.value) {
+        player.value.gameSystem = createPlayerGameSystem(player.value)
+      }
+    }).catch(err => {
+      console.warn('Engine系统初始化失败:', err)
+    })
   }
 
   // 绑定到账号
@@ -479,11 +527,78 @@ export const usePlayerStore = defineStore('player', () => {
     }
   }
 
+  // ==================== 装备强化系统 ====================
+
+  // 计算强化费用（灵石无限强化，等级越高费用越高）
+  function getEnhancementCost(level: number): number {
+    if (level < 0) return 0
+    // 强化费用 = 100 * (level + 1) * (level + 1)
+    // +0: 100, +1: 400, +2: 900, +3: 1600, +4: 2500, +5: 3600, +6: 4900...
+    return Math.floor(100 * Math.pow(level + 1, 2))
+  }
+
+  // 计算强化后的属性加成
+  function getEnhancementMultiplier(level: number): number {
+    if (level <= 0) return 1.0
+    // 每级+10%属性
+    return 1.0 + level * 0.1
+  }
+
+  // 强化装备（背包或已装备）
+  function enhanceEquipment(equipmentId: string, fromInventory: boolean = true): { success: boolean; message: string } {
+    if (!player.value) return { success: false, message: '玩家数据不存在' }
+
+    let equipment: Equipment | undefined
+    let inventoryIndex = -1
+    let slotKey: keyof EquipmentSlots | null = null
+
+    if (fromInventory) {
+      // 从背包强化
+      inventoryIndex = player.value.inventory.findIndex(e => e.id === equipmentId)
+      if (inventoryIndex > -1) {
+        equipment = player.value.inventory[inventoryIndex]
+      }
+    } else {
+      // 从已装备中强化
+      for (const [key, item] of Object.entries(player.value.equipment)) {
+        if (item && item.id === equipmentId) {
+          equipment = item
+          slotKey = key as keyof EquipmentSlots
+          break
+        }
+      }
+    }
+
+    if (!equipment) return { success: false, message: '装备不存在' }
+
+    const currentLevel = equipment.enhancementLevel || 0
+    const cost = getEnhancementCost(currentLevel)
+
+    if (player.value.spiritStones < cost) {
+      return { success: false, message: `灵石不足！需要 ${cost} 灵石` }
+    }
+
+    // 扣除灵石
+    player.value.spiritStones -= cost
+
+    // 升级强化等级
+    equipment.enhancementLevel = currentLevel + 1
+
+    // 重新计算玩家属性
+    recalcStats()
+
+    return {
+      success: true,
+      message: `强化成功！装备等级提升至 +${equipment.enhancementLevel}，消耗 ${cost} 灵石`
+    }
+  }
+
   // ==================== 功法系统 ====================
 
   // 添加功法
   function addTechnique(technique: Technique) {
     if (!player.value) return
+    if (!player.value.techniques) player.value.techniques = []
     // 检查是否已有同名功法
     const alreadyHave = player.value.techniques.some(t => t.name === technique.name)
     if (alreadyHave) return false
@@ -495,6 +610,8 @@ export const usePlayerStore = defineStore('player', () => {
   // 装备功法（最多装备3个）
   function equipTechnique(techniqueId: string) {
     if (!player.value) return false
+    if (!player.value.techniques) player.value.techniques = []
+    if (!player.value.equippedTechniqueIds) player.value.equippedTechniqueIds = []
     const technique = player.value.techniques.find(t => t.id === techniqueId)
     if (!technique) return false
 
@@ -518,9 +635,9 @@ export const usePlayerStore = defineStore('player', () => {
   // 获取已装备的功法
   const equippedTechniques = computed(() => {
     if (!player.value) return []
-    return player.value.techniques.filter(t => 
-      player.value!.equippedTechniqueIds.includes(t.id)
-    )
+    const techniques = player.value.techniques || []
+    const equippedIds = player.value.equippedTechniqueIds || []
+    return techniques.filter(t => equippedIds.includes(t.id))
   })
 
   // 计算功法属性加成
@@ -535,8 +652,11 @@ export const usePlayerStore = defineStore('player', () => {
     let lifesteal = 0
     let spiritPerSec = 0
     let damageReduction = 0
+    let reflectDamage = 0
+    let regenPerSec = 0
 
     for (const tech of techniques) {
+      if (!tech.effects) continue
       for (const effect of tech.effects) {
         switch (effect.type) {
           case 'attackBonus': attackBonus += effect.value; break
@@ -548,11 +668,13 @@ export const usePlayerStore = defineStore('player', () => {
           case 'lifesteal': lifesteal += effect.value; break
           case 'spiritPerSec': spiritPerSec += effect.value; break
           case 'damageReduction': damageReduction += effect.value; break
+          case 'reflectDamage': reflectDamage += effect.value; break
+          case 'regenPerSec': regenPerSec += effect.value; break
         }
       }
     }
 
-    return { attackBonus, defenseBonus, hpBonus, critRate, critDamage, dodgeRate, lifesteal, spiritPerSec, damageReduction }
+    return { attackBonus, defenseBonus, hpBonus, critRate, critDamage, dodgeRate, lifesteal, spiritPerSec, damageReduction, reflectDamage, regenPerSec }
   })
 
   // 添加灵宠
@@ -675,12 +797,13 @@ export const usePlayerStore = defineStore('player', () => {
     let baseAttack = 10 + player.value.realmIndex * 8 + player.value.realmLevel * 2
     let baseDefense = 5 + player.value.realmIndex * 5 + player.value.realmLevel * 1
     
-    // 装备加成
+    // 装备加成（包含强化加成）
     for (const item of Object.values(player.value.equipment)) {
       if (item) {
-        baseHp += item.hpBonus
-        baseAttack += item.attackBonus
-        baseDefense += item.defenseBonus
+        const multiplier = getEnhancementMultiplier(item.enhancementLevel || 0)
+        baseHp += Math.floor(item.hpBonus * multiplier)
+        baseAttack += Math.floor(item.attackBonus * multiplier)
+        baseDefense += Math.floor(item.defenseBonus * multiplier)
       }
     }
     
@@ -729,70 +852,176 @@ export const usePlayerStore = defineStore('player', () => {
     }
   }
 
-  // 保存游戏
-  function saveGame() {
+  // 保存游戏（IndexedDB + localStorage 双写，确保安全）
+  async function saveGame() {
     if (player.value) {
       player.value.lastOnline = Date.now()
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(player.value))
+      const data = player.value
+      const userId = player.value.userId || 'local'
+      const characterName = player.value.name
+
+      // 同时写入 IndexedDB 和 localStorage（双保险）
+      try {
+        await saveToDB(userId, characterName, data)
+      } catch (e) {
+        console.error('IndexedDB 保存失败，回退到 localStorage:', e)
+      }
+      // localStorage 作为备份
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
     }
   }
 
-  // 加载游戏
-  function loadGame() {
+  // 加载游戏（优先 IndexedDB，回退 localStorage）
+  async function loadGame(): Promise<boolean> {
+    const authStore = useAuthStore()
+    const userId = authStore.currentUser?.id || 'local'
+
+    // 1. 先尝试从 IndexedDB 加载
+    try {
+      if (player.value?.name) {
+        const data = await loadFromDB(userId, player.value.name)
+        if (data) {
+          player.value = data as Player
+          applySaveCompatAndStart()
+          return true
+        }
+      }
+    } catch (e) {
+      console.warn('IndexedDB 加载失败，尝试 localStorage:', e)
+    }
+
+    // 2. 回退到 localStorage
     const saved = localStorage.getItem(STORAGE_KEY)
     if (saved) {
-      player.value = JSON.parse(saved)
-      
-      // 兼容旧存档：如果没有阵法数据，初始化阵法
-      if (!player.value!.formation) {
-        const firstFormation = FORMATION_CONFIGS[0]
-        player.value!.formation = {
-          formationId: firstFormation.id,
-          nodes: firstFormation.nodes.map(n => ({
-            type: n.type,
-            level: 0,
-            activated: false
-          })),
-          realmIndex: 0
+      try {
+        player.value = JSON.parse(saved)
+
+        // 将 localStorage 存档同步到 IndexedDB（自动迁移）
+        try {
+          const id = player.value.userId || userId
+          await saveToDB(id, player.value.name, player.value)
+        } catch (e) {
+          console.warn('localStorage → IndexedDB 同步失败:', e)
         }
+
+        applySaveCompatAndStart()
+        return true
+      } catch (e) {
+        console.error('localStorage 存档解析失败:', e)
       }
-      
-      // 兼容旧存档：如果没有已解锁阵法列表，初始化
-      if (!player.value!.unlockedFormations) {
-        player.value!.unlockedFormations = [FORMATION_CONFIGS[0].id]
-        // 根据当前境界解锁对应阵法
-        for (let i = 1; i <= player.value!.realmIndex; i++) {
-          if (FORMATION_CONFIGS[i]) {
-            player.value!.unlockedFormations.push(FORMATION_CONFIGS[i].id)
-          }
-        }
-      }
-      
-      startCultivation()
-      
-      // 离线收益（50%，最多24小时）- 现在考虑阵法加成
-      const offlineTime = Math.min(Date.now() - player.value!.lastOnline, 86400000)
-      const offlineSeconds = offlineTime / 1000
-      const realm = REALMS[player.value!.realmIndex]
-      const offlineSpiritBase = realm.spiritPerSec * 0.5
-      const offlineSpiritBonus = (setBonuses.value.spiritPerSecBonus + formationBonus.value.spiritBonus) * 0.5
-      const offlineSpirit = Math.floor(offlineSeconds * (offlineSpiritBase + offlineSpiritBonus))
-      if (offlineSpirit > 0) {
-        const offlineCapacityBonus = formationBonus.value.capacityBonus
-        player.value!.spiritEnergy = Math.min(
-          player.value!.spiritEnergy + offlineSpirit,
-          realm.spiritCap + offlineCapacityBonus
-        )
-      }
-      recalcStats()
-      return true
     }
+
     return false
   }
 
-  // 删除存档
-  function deleteGame() {
+  // 存档兼容性处理 + 启动游戏
+  function applySaveCompatAndStart() {
+    if (!player.value) return
+    
+    // 兼容旧存档：如果没有阵法数据，初始化阵法
+    if (!player.value!.formation) {
+      const firstFormation = FORMATION_CONFIGS[0]
+      player.value!.formation = {
+        formationId: firstFormation.id,
+        nodes: firstFormation.nodes.map(n => ({
+          type: n.type,
+          level: 0,
+          activated: false
+        })),
+        realmIndex: 0
+      }
+    }
+    
+    // 兼容旧存档：如果没有已解锁阵法列表，初始化
+    if (!player.value!.unlockedFormations) {
+      player.value!.unlockedFormations = [FORMATION_CONFIGS[0].id]
+      // 根据当前境界解锁对应阵法
+      for (let i = 1; i <= player.value!.realmIndex; i++) {
+        if (FORMATION_CONFIGS[i]) {
+          player.value!.unlockedFormations.push(FORMATION_CONFIGS[i].id)
+        }
+      }
+    }
+    
+    // 兼容旧存档：如果没有功法数据，初始化功法
+    if (!player.value!.techniques) {
+      player.value!.techniques = []
+    }
+    if (!player.value!.equippedTechniqueIds) {
+      player.value!.equippedTechniqueIds = []
+    }
+    
+    // 兼容旧存档：Engine系统字段
+    if (!player.value!.level) {
+      player.value!.level = player.value!.realmIndex * 10 + player.value!.realmLevel + 1
+    }
+    if (!player.value!.mp) {
+      player.value!.mp = 100
+      player.value!.maxMp = 100
+    }
+    if (!player.value!.sp) {
+      player.value!.sp = 0
+      player.value!.maxSp = 100
+    }
+    if (!player.value!.spiritRoot) {
+      player.value!.spiritRoot = Math.floor(Math.random() * 5) + 5
+    }
+    
+    // 战斗属性
+    if (!player.value!.critRate) player.value!.critRate = 0.15
+    if (!player.value!.critDamage) player.value!.critDamage = 1.8
+    if (!player.value!.dodgeRate) player.value!.dodgeRate = 0.08
+    if (!player.value!.hitRate) player.value!.hitRate = 0.95
+    if (!player.value!.attackSpeed) player.value!.attackSpeed = 1
+    if (!player.value!.lifesteal) player.value!.lifesteal = 0
+    if (!player.value!.damageReduction) player.value!.damageReduction = 0
+    if (!player.value!.reflectDamage) player.value!.reflectDamage = 0
+    
+    // 修炼属性
+    if (!player.value!.wisdom) player.value!.wisdom = 10
+    if (!player.value!.willpower) player.value!.willpower = 10
+    if (!player.value!.insight) player.value!.insight = 0
+    if (!player.value!.maxInsight) player.value!.maxInsight = 100
+    
+    // Engine系统数据
+    if (!player.value!.buffs) player.value!.buffs = []
+    if (!player.value!.shields) player.value!.shields = []
+    if (!player.value!.injuries) player.value!.injuries = []
+    if (!player.value!.learnedSkills) player.value!.learnedSkills = []
+    
+    // 初始化游戏系统
+    initGameSystem()
+    
+    startCultivation()
+    
+    // 离线收益（50%，最多24小时）- 现在考虑阵法加成
+    const offlineTime = Math.min(Date.now() - player.value!.lastOnline, 86400000)
+    const offlineSeconds = offlineTime / 1000
+    const realm = REALMS[player.value!.realmIndex]
+    const offlineSpiritBase = realm.spiritPerSec * 0.5
+    const offlineSpiritBonus = (setBonuses.value.spiritPerSecBonus + formationBonus.value.spiritBonus) * 0.5
+    const offlineSpirit = Math.floor(offlineSeconds * (offlineSpiritBase + offlineSpiritBonus))
+    if (offlineSpirit > 0) {
+      const offlineCapacityBonus = formationBonus.value.capacityBonus
+      player.value!.spiritEnergy = Math.min(
+        player.value!.spiritEnergy + offlineSpirit,
+        realm.spiritCap + offlineCapacityBonus
+      )
+    }
+    recalcStats()
+  }
+
+  // 删除存档（同时删除 IndexedDB 和 localStorage）
+  async function deleteGame() {
     stopCultivation()
+    if (player.value) {
+      const userId = player.value.userId || 'local'
+      try {
+        await deleteFromDB(userId, player.value.name)
+      } catch (e) {
+        console.warn('IndexedDB 删除失败:', e)
+      }
+    }
     localStorage.removeItem(STORAGE_KEY)
     player.value = null
   }
@@ -824,6 +1053,9 @@ export const usePlayerStore = defineStore('player', () => {
     fullHeal,
     equipItem,
     unequipItem,
+    enhanceEquipment,
+    getEnhancementCost,
+    getEnhancementMultiplier,
     addPet,
     feedPet,
     awakenPet,

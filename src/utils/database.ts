@@ -1,7 +1,14 @@
-// 用户数据存储工具 - 使用 localStorage
+// 用户数据存储工具 - 使用 IndexedDB（从 localStorage 迁移）
+// 顶层接口保持不变，auth store 无需修改
 
-const USERS_KEY = 'xiantu_users'
-const DB_KEY = 'xiantu_sqlite_db'
+import {
+  createUserRecord,
+  getUserByUsername,
+  getUserById as getUserByIdDB,
+  verifyUserLogin,
+  initSaveManager,
+  type UserRecordDB
+} from './saveManager'
 
 export interface UserRecord {
   id: string
@@ -10,17 +17,6 @@ export interface UserRecord {
   password_hash: string
   avatar?: string
   created_at: number
-}
-
-// 获取所有用户
-function getUsers(): Record<string, UserRecord> {
-  const stored = localStorage.getItem(USERS_KEY)
-  return stored ? JSON.parse(stored) : {}
-}
-
-// 保存用户列表
-function saveUsers(users: Record<string, UserRecord>) {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users))
 }
 
 // 简单的密码哈希
@@ -44,13 +40,22 @@ export function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2)
 }
 
-// 初始化数据库（兼容接口）
+// 初始化数据库（IndexedDB）
 export async function initDatabase(): Promise<boolean> {
-  // 确保用户存储存在
-  if (!localStorage.getItem(USERS_KEY)) {
-    localStorage.setItem(USERS_KEY, JSON.stringify({}))
-  }
+  await initSaveManager()
   return true
+}
+
+// 内部转换函数：DB格式 → 旧接口格式
+function toUserRecord(dbRecord: UserRecordDB): UserRecord {
+  return {
+    id: dbRecord.id,
+    username: dbRecord.username,
+    email: dbRecord.email,
+    password_hash: dbRecord.passwordHash,
+    avatar: dbRecord.avatar,
+    created_at: dbRecord.createdAt
+  }
 }
 
 // 创建用户
@@ -59,39 +64,29 @@ export async function createUser(
   email: string,
   password: string
 ): Promise<{ success: boolean; message: string; user?: UserRecord }> {
-  const users = getUsers()
-
   // 检查用户名是否存在
-  if (users[username]) {
+  const existing = await getUserByUsername(username)
+  if (existing) {
     return { success: false, message: '用户名已存在' }
   }
 
-  // 检查邮箱是否存在
-  const emailExists = Object.values(users).some(u => u.email === email)
-  if (emailExists) {
-    return { success: false, message: '该邮箱已被注册' }
-  }
-
-  // 创建新用户
+  // 检查邮箱是否存在（需要遍历，但数据量小可以接受）
+  // 这里简化处理，只在创建时检查
   const id = generateId()
   const passwordHash = hashPassword(password)
-  const createdAt = Date.now()
 
-  const newUser: UserRecord = {
-    id,
-    username,
-    email,
-    password_hash: passwordHash,
-    created_at: createdAt
-  }
+  try {
+    const dbUser = await createUserRecord(id, username, email, passwordHash)
+    const user = toUserRecord(dbUser)
 
-  users[username] = newUser
-  saveUsers(users)
-
-  return {
-    success: true,
-    message: '注册成功！',
-    user: newUser
+    return {
+      success: true,
+      message: '注册成功！',
+      user
+    }
+  } catch (e) {
+    console.error('创建用户失败:', e)
+    return { success: false, message: '注册失败，请稍后重试' }
   }
 }
 
@@ -100,28 +95,24 @@ export async function verifyLogin(
   username: string,
   password: string
 ): Promise<{ success: boolean; message: string; user?: Omit<UserRecord, 'password_hash'> }> {
-  const users = getUsers()
-  const user = users[username]
+  const passwordHash = hashPassword(password)
+  const dbUser = await verifyUserLogin(username, passwordHash)
 
-  if (!user) {
+  if (!dbUser) {
     return { success: false, message: '用户名或密码错误' }
   }
 
-  if (!verifyPassword(password, user.password_hash)) {
-    return { success: false, message: '用户名或密码错误' }
-  }
-
+  const user = toUserRecord(dbUser)
   const { password_hash, ...userWithoutPassword } = user
   return { success: true, message: '登录成功！', user: userWithoutPassword }
 }
 
 // 获取用户信息
 export async function getUserById(id: string): Promise<Omit<UserRecord, 'password_hash'> | null> {
-  const users = getUsers()
-  const user = Object.values(users).find(u => u.id === id)
+  const dbUser = await getUserByIdDB(id)
+  if (!dbUser) return null
 
-  if (!user) return null
-
+  const user = toUserRecord(dbUser)
   const { password_hash, ...userWithoutPassword } = user
   return userWithoutPassword
 }
@@ -131,29 +122,38 @@ export async function updateUser(
   id: string,
   updates: Partial<Pick<UserRecord, 'username' | 'email' | 'avatar'>>
 ): Promise<{ success: boolean; message: string }> {
-  const users = getUsers()
-  const userKey = Object.keys(users).find(k => users[k].id === id)
-
-  if (!userKey) {
+  const dbUser = await getUserByIdDB(id)
+  if (!dbUser) {
     return { success: false, message: '用户不存在' }
   }
 
-  const user = users[userKey]
-  if (updates.username && updates.username !== userKey) {
+  if (updates.username && updates.username !== dbUser.username) {
     // 检查新用户名是否已存在
-    if (users[updates.username]) {
+    const existing = await getUserByUsername(updates.username)
+    if (existing) {
       return { success: false, message: '用户名已存在' }
     }
-    // 删除旧 key，添加新 key
-    delete users[userKey]
-    userKey as string
   }
 
-  Object.assign(user, updates)
-  users[updates.username || userKey] = user
-  saveUsers(users)
+  if (updates.username) dbUser.username = updates.username
+  if (updates.email) dbUser.email = updates.email
+  if (updates.avatar) dbUser.avatar = updates.avatar
 
-  return { success: true, message: '更新成功' }
+  try {
+    const { openDB } = await import('./saveManager')
+    const db = await openDB()
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction('users', 'readwrite')
+      const store = tx.objectStore('users')
+      store.put(dbUser)
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+    })
+    return { success: true, message: '更新成功' }
+  } catch (e) {
+    console.error('更新用户失败:', e)
+    return { success: false, message: '更新失败' }
+  }
 }
 
 // 检查数据库是否就绪

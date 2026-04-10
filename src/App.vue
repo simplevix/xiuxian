@@ -19,11 +19,12 @@ const isLoggedIn = computed(() => authStore.isLoggedIn)
 const currentUser = computed(() => authStore.currentUser)
 
 // 检查是否应该自动进入游戏
-function checkAutoEnterGame() {
+async function checkAutoEnterGame(): Promise<boolean> {
   if (!isLoggedIn.value) return false
   
   // 加载本地存档
-  if (playerStore.loadGame()) {
+  const loaded = await playerStore.loadGame()
+  if (loaded) {
     // 检查存档是否绑定到当前账号
     if (playerStore.player?.userId === authStore.currentUser?.id) {
       return true
@@ -32,16 +33,20 @@ function checkAutoEnterGame() {
   return false
 }
 
-onMounted(() => {
+onMounted(async () => {
+  // 初始化存档管理器
+  const { initSaveManager } = await import('@/utils/saveManager')
+  await initSaveManager()
+
   // 检查是否应该自动进入游戏
-  if (checkAutoEnterGame()) {
+  if (await checkAutoEnterGame()) {
     viewMode.value = 'game'
   }
 })
 
 // 监听登录状态变化
-watch(isLoggedIn, (loggedIn) => {
-  if (loggedIn && checkAutoEnterGame()) {
+watch(isLoggedIn, async (loggedIn) => {
+  if (loggedIn && await checkAutoEnterGame()) {
     viewMode.value = 'game'
   }
 })
@@ -63,11 +68,13 @@ function openRegister() {
 function closeAuth() {
   showAuthModal.value = false
   // 关闭模态框后检查是否应该进入游戏
-  if (checkAutoEnterGame()) {
-    viewMode.value = 'game'
-  } else {
-    viewMode.value = 'home'
-  }
+  checkAutoEnterGame().then((canEnter) => {
+    if (canEnter) {
+      viewMode.value = 'game'
+    } else {
+      viewMode.value = 'home'
+    }
+  })
 }
 
 function switchToLogin() {
