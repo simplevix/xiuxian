@@ -1,9 +1,8 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Player, Equipment, Pet, Artifact, EquipmentSlots, SetConfig, Technique, TechniqueEffect, PlayerFormation, FormationConfig, FormationNode } from '@/types/game'
+import type { Player, Equipment, Pet, Artifact, EquipmentSlots, SetConfig, Technique, TechniqueEffect, PlayerFormation, FormationConfig, FormationNode, AutoSellSetting, EquipmentQuality } from '@/types/game'
 import { REALMS, SET_CONFIGS, FORMATION_CONFIGS } from '@/types/game'
 import { generateId } from '@/utils/random'
-import { useAuthStore } from './auth'
 import { savePlayerData as saveToDB, loadPlayerData as loadFromDB, deletePlayerData as deleteFromDB, initSaveManager } from '@/utils/saveManager'
 
 const STORAGE_KEY = 'xiantu_player' // 保留作为 localStorage 兼容的 fallback
@@ -19,8 +18,6 @@ export const usePlayerStore = defineStore('player', () => {
     return player.value.realmIndex * 10 + player.value.realmLevel + 1
   })
 
-  // 检查玩家是否已绑定账号
-  const hasAccount = computed(() => !!player.value?.userId)
   // 检查玩家是否有角色
   const hasCharacter = computed(() => !!player.value)
 
@@ -260,10 +257,7 @@ export const usePlayerStore = defineStore('player', () => {
   // 境界进度上限
   const realmProgressMax = computed(() => currentRealm.value?.realmLevelCap || 10)
 
-  function createPlayer(name: string, bindToUserId?: string) {
-    const authStore = useAuthStore()
-    const userId = bindToUserId || authStore.currentUser?.id
-
+  function createPlayer(name: string) {
     // 初始化阵法（新角色默认解锁并激活第一个阵法）
     const firstFormation = FORMATION_CONFIGS[0]
     const initialFormation: PlayerFormation = {
@@ -279,7 +273,6 @@ export const usePlayerStore = defineStore('player', () => {
     player.value = {
       id: generateId(),
       name,
-      userId: userId,
       realmIndex: 0,
       realmLevel: 0,  // 境界进度（层数）
       level: 1,       // 总等级
@@ -350,14 +343,6 @@ export const usePlayerStore = defineStore('player', () => {
     }).catch(err => {
       console.warn('Engine系统初始化失败:', err)
     })
-  }
-
-  // 绑定到账号
-  function bindToAccount(userId: string) {
-    if (player.value) {
-      player.value.userId = userId
-      saveGame()
-    }
   }
 
   // 挂机修炼 - 每秒执行
@@ -777,6 +762,108 @@ export const usePlayerStore = defineStore('player', () => {
     return sellPrice
   }
 
+  // ==================== 自动出售系统 ====================
+  
+  // 品质优先级（数值越高品质越高）
+  const QUALITY_ORDER: EquipmentQuality[] = ['common', 'good', 'rare', 'epic', 'legendary']
+  
+  // 获取品质等级数值
+  function getQualityLevel(quality: string): number {
+    return QUALITY_ORDER.indexOf(quality as EquipmentQuality)
+  }
+  
+  // 计算装备出售价格
+  function getEquipmentSellPrice(equipment: Equipment): number {
+    const prices: Record<string, number> = {
+      common: 10, good: 30, rare: 80, epic: 200, legendary: 500
+    }
+    let price = prices[equipment.quality] || 10
+    // 套装装备价格翻倍
+    if (equipment.setId) price = price * 2
+    return price
+  }
+  
+  // 更新自动出售设置
+  function updateAutoSellSetting(setting: Partial<AutoSellSetting>) {
+    if (!player.value) return
+    if (!player.value.autoSellSetting) {
+      player.value.autoSellSetting = {
+        enabled: false,
+        minQuality: 'common',
+        sellSetEquipment: false
+      }
+    }
+    Object.assign(player.value.autoSellSetting, setting)
+    saveGame()
+  }
+  
+  // 处理装备自动出售
+  function processAutoSell(equipment: Equipment): { sold: boolean; price: number } {
+    if (!player.value?.autoSellSetting || !player.value.autoSellSetting.enabled) {
+      return { sold: false, price: 0 }
+    }
+    
+    const setting = player.value.autoSellSetting
+    const equipQualityLevel = getQualityLevel(equipment.quality)
+    const minQualityLevel = getQualityLevel(setting.minQuality)
+    
+    // 检查是否需要自动出售
+    // 装备品质低于设置阈值时才自动出售
+    if (equipQualityLevel >= minQualityLevel) {
+      return { sold: false, price: 0 }
+    }
+    
+    // 检查套装装备设置
+    if (equipment.setId && !setting.sellSetEquipment) {
+      return { sold: false, price: 0 }
+    }
+    
+    // 执行出售
+    const price = getEquipmentSellPrice(equipment)
+    player.value.spiritStones += price
+    
+    return { sold: true, price }
+  }
+  
+  // 手动执行背包自动出售（根据当前设置）
+  function sellInventoryByAutoSettings(): { count: number; price: number } {
+    if (!player.value) return { count: 0, price: 0 }
+    
+    const setting = player.value.autoSellSetting
+    if (!setting?.enabled) return { count: 0, price: 0 }
+    
+    let totalCount = 0
+    let totalPrice = 0
+    
+    // 遍历背包，找到需要自动出售的装备
+    const toSell: number[] = []
+    player.value.inventory.forEach((item, index) => {
+      const equipQualityLevel = getQualityLevel(item.quality)
+      const minQualityLevel = getQualityLevel(setting.minQuality)
+      
+      // 检查是否低于设置阈值
+      if (equipQualityLevel >= minQualityLevel) return
+      
+      // 检查套装设置
+      if (item.setId && !setting.sellSetEquipment) return
+      
+      toSell.push(index)
+      totalPrice += getEquipmentSellPrice(item)
+      totalCount++
+    })
+    
+    // 从后往前删除（避免索引变化）
+    for (let i = toSell.length - 1; i >= 0; i--) {
+      player.value.inventory.splice(toSell[i], 1)
+    }
+    
+    if (totalCount > 0) {
+      player.value.spiritStones += totalPrice
+    }
+    
+    return { count: totalCount, price: totalPrice }
+  }
+
   // 使用法宝技能
   function useArtifactSkill() {
     if (!player.value || !player.value.equippedArtifactId) return null
@@ -857,12 +944,11 @@ export const usePlayerStore = defineStore('player', () => {
     if (player.value) {
       player.value.lastOnline = Date.now()
       const data = player.value
-      const userId = player.value.userId || 'local'
       const characterName = player.value.name
 
       // 同时写入 IndexedDB 和 localStorage（双保险）
       try {
-        await saveToDB(userId, characterName, data)
+        await saveToDB(characterName, data)
       } catch (e) {
         console.error('IndexedDB 保存失败，回退到 localStorage:', e)
       }
@@ -873,13 +959,10 @@ export const usePlayerStore = defineStore('player', () => {
 
   // 加载游戏（优先 IndexedDB，回退 localStorage）
   async function loadGame(): Promise<boolean> {
-    const authStore = useAuthStore()
-    const userId = authStore.currentUser?.id || 'local'
-
     // 1. 先尝试从 IndexedDB 加载
     try {
       if (player.value?.name) {
-        const data = await loadFromDB(userId, player.value.name)
+        const data = await loadFromDB(player.value.name)
         if (data) {
           player.value = data as Player
           applySaveCompatAndStart()
@@ -898,8 +981,7 @@ export const usePlayerStore = defineStore('player', () => {
 
         // 将 localStorage 存档同步到 IndexedDB（自动迁移）
         try {
-          const id = player.value.userId || userId
-          await saveToDB(id, player.value.name, player.value)
+          await saveToDB(player.value.name, player.value)
         } catch (e) {
           console.warn('localStorage → IndexedDB 同步失败:', e)
         }
@@ -1015,9 +1097,8 @@ export const usePlayerStore = defineStore('player', () => {
   async function deleteGame() {
     stopCultivation()
     if (player.value) {
-      const userId = player.value.userId || 'local'
       try {
-        await deleteFromDB(userId, player.value.name)
+        await deleteFromDB(player.value.name)
       } catch (e) {
         console.warn('IndexedDB 删除失败:', e)
       }
@@ -1032,7 +1113,6 @@ export const usePlayerStore = defineStore('player', () => {
     totalLevel,
     realmProgress,
     realmProgressMax,
-    hasAccount,
     hasCharacter,
     activeSetInfo,
     setBonuses,
@@ -1041,7 +1121,6 @@ export const usePlayerStore = defineStore('player', () => {
     activeFormationConfig,
     formationBonus,
     createPlayer,
-    bindToAccount,
     startCultivation,
     stopCultivation,
     checkAndAdvanceRealmProgress,
@@ -1073,6 +1152,11 @@ export const usePlayerStore = defineStore('player', () => {
     saveGame,
     loadGame,
     deleteGame,
-    getRealmLevelExpNeeded
+    getRealmLevelExpNeeded,
+    // 自动出售
+    updateAutoSellSetting,
+    processAutoSell,
+    sellInventoryByAutoSettings,
+    getEquipmentSellPrice
   }
 })

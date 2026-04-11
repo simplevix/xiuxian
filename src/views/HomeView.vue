@@ -1,29 +1,17 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import { usePlayerStore } from '@/stores/player'
-import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 
 const emit = defineEmits<{
   start: []
-  login: []
-  register: []
 }>()
 
 const playerStore = usePlayerStore()
-const authStore = useAuthStore()
 const playerName = ref('')
 
-// 是否已登录
-const isLoggedIn = computed(() => authStore.isLoggedIn)
 // 是否有角色
-const hasCharacter = computed(() => playerStore.hasCharacter)
-// 角色是否绑定当前账号
-const isCharacterBoundToCurrentUser = computed(() => {
-  if (!playerStore.player) return false
-  if (!authStore.currentUser) return false
-  return playerStore.player.userId === authStore.currentUser.id
-})
+const hasCharacter = playerStore.hasCharacter
 
 // 创建角色
 function createPlayer() {
@@ -32,15 +20,8 @@ function createPlayer() {
     return
   }
   
-  // 如果已登录，创建角色时绑定到账号
-  if (isLoggedIn.value) {
-    playerStore.createPlayer(playerName.value.trim(), authStore.currentUser!.id)
-    ElMessage.success(`修仙之路开启！道号 ${playerName.value.trim()} 已绑定到账号`)
-  } else {
-    playerStore.createPlayer(playerName.value.trim())
-    ElMessage.success('修仙之路开启！')
-  }
-  
+  playerStore.createPlayer(playerName.value.trim())
+  ElMessage.success('修仙之路开启！')
   emit('start')
 }
 
@@ -48,46 +29,8 @@ function createPlayer() {
 async function continueGame() {
   const loaded = await playerStore.loadGame()
   if (loaded) {
-    // 如果已登录但角色未绑定当前账号，给出提示
-    if (isLoggedIn.value && !isCharacterBoundToCurrentUser.value) {
-      ElMessage.warning('当前存档与登录账号不匹配，可以新建角色绑定到当前账号')
-    }
     emit('start')
   }
-}
-
-// 继续游戏（已登录账号）
-async function continueAsUser() {
-  if (isLoggedIn.value) {
-    // 加载本地存档
-    const loaded = await playerStore.loadGame()
-    if (loaded) {
-      // 如果存档已绑定到当前账号，直接进入
-      if (isCharacterBoundToCurrentUser.value) {
-        emit('start')
-      } else {
-        ElMessage.warning('当前存档与登录账号不匹配')
-      }
-    } else {
-      // 没有本地存档，提示需要创建角色
-      ElMessage.info('登录账号暂无角色，请创建角色')
-    }
-  }
-}
-
-// 打开登录
-function openLogin() {
-  emit('login')
-}
-
-// 打开注册
-function openRegister() {
-  emit('register')
-}
-
-// 登出
-function handleLogout() {
-  authStore.logout()
 }
 </script>
 
@@ -101,7 +44,7 @@ function handleLogout() {
       </div>
 
       <!-- 已有角色 - 直接进入游戏 -->
-      <template v-if="hasCharacter && !isLoggedIn">
+      <template v-if="hasCharacter">
         <div class="continue-section game-card">
           <p class="welcome-text">欢迎回来，{{ playerStore.player?.name }}</p>
           <el-button size="large" class="continue-btn" @click="continueGame">
@@ -110,56 +53,9 @@ function handleLogout() {
           </el-button>
           <p class="continue-hint">上次修炼：{{ playerStore.currentRealm?.name }}</p>
         </div>
-        
-        <div class="auth-section game-card">
-          <p class="auth-hint">登录后可将角色绑定到云端，换设备也能继续玩</p>
-          <div class="auth-buttons">
-            <el-button size="large" class="login-btn" @click="openLogin">
-              <el-icon><User /></el-icon>
-              登录
-            </el-button>
-            <el-button type="primary" size="large" class="register-btn" @click="openRegister">
-              <el-icon><Plus /></el-icon>
-              注册
-            </el-button>
-          </div>
-        </div>
       </template>
 
-      <!-- 已登录 - 检查是否有角色 -->
-      <template v-else-if="isLoggedIn">
-        <div class="user-welcome game-card">
-          <div class="user-info-row">
-            <el-icon><User /></el-icon>
-            <span>{{ authStore.currentUser?.username }}</span>
-          </div>
-          
-          <template v-if="hasCharacter">
-            <template v-if="isCharacterBoundToCurrentUser">
-              <p class="welcome-text">欢迎回来，{{ playerStore.player?.name }}</p>
-              <el-button size="large" class="continue-btn" @click="continueAsUser">
-                <el-icon><RefreshRight /></el-icon>
-                继续修仙
-              </el-button>
-            </template>
-            <template v-else>
-              <p class="hint-text">当前存档与登录账号不匹配</p>
-              <el-button type="warning" size="large" @click="continueGame">
-                继续本地游戏
-              </el-button>
-              <el-button size="large" class="create-btn" @click="playerName = ''; createPlayer()">
-                创建新角色绑定到此账号
-              </el-button>
-            </template>
-          </template>
-          
-          <template v-else>
-            <p class="hint-text">创建你的修仙角色</p>
-          </template>
-        </div>
-      </template>
-
-      <!-- 未登录且无角色 - 创建角色 + 登录选项 -->
+      <!-- 未登录且无角色 - 创建角色 -->
       <template v-else>
         <!-- 创建角色 -->
         <div class="create-section game-card">
@@ -175,21 +71,6 @@ function handleLogout() {
             <el-icon><Pointer /></el-icon>
             开始修仙
           </el-button>
-        </div>
-
-        <!-- 登录/注册提示区 -->
-        <div class="auth-section game-card">
-          <p class="auth-hint">登录后可同步游戏数据，开启修仙之旅</p>
-          <div class="auth-buttons">
-            <el-button size="large" class="login-btn" @click="openLogin">
-              <el-icon><User /></el-icon>
-              登录
-            </el-button>
-            <el-button type="primary" size="large" class="register-btn" @click="openRegister">
-              <el-icon><Plus /></el-icon>
-              注册
-            </el-button>
-          </div>
         </div>
       </template>
 
@@ -260,34 +141,6 @@ function handleLogout() {
   letter-spacing: 4px;
 }
 
-/* 欢迎用户 */
-.user-welcome {
-  text-align: center;
-  margin-bottom: 24px;
-  padding: 24px;
-}
-
-.user-info-row {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: var(--accent-cyan);
-  font-size: 1.1rem;
-  margin-bottom: 16px;
-}
-
-.welcome-text {
-  font-size: 1.2rem;
-  color: var(--text-primary);
-  margin-bottom: 16px;
-}
-
-.hint-text {
-  color: var(--text-secondary);
-  margin-bottom: 16px;
-}
-
 /* 继续游戏 */
 .continue-section {
   text-align: center;
@@ -295,7 +148,7 @@ function handleLogout() {
   padding: 24px;
 }
 
-.continue-section .welcome-text {
+.welcome-text {
   font-size: 1.3rem;
   color: var(--accent-gold);
   margin-bottom: 16px;
@@ -319,47 +172,6 @@ function handleLogout() {
   color: var(--text-secondary);
   font-size: 0.9rem;
   margin-top: 12px;
-}
-
-/* 登录/注册区域 */
-.auth-section {
-  text-align: center;
-  margin-bottom: 24px;
-  padding: 20px;
-}
-
-.auth-hint {
-  color: var(--text-secondary);
-  font-size: 0.95rem;
-  margin-bottom: 16px;
-}
-
-.auth-buttons {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-}
-
-.login-btn {
-  flex: 1;
-  background: transparent;
-  border: 2px solid var(--accent-cyan);
-  color: var(--accent-cyan);
-}
-
-.login-btn:hover {
-  background: rgba(0, 210, 255, 0.1);
-}
-
-.register-btn {
-  flex: 1;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border: none;
-}
-
-.register-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
 }
 
 /* 创建角色 */
