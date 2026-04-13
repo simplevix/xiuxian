@@ -2,21 +2,19 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { usePlayerStore } from '@/stores/player'
 import { useBattleStore } from '@/stores/battle'
-import { useWorldStore } from '@/stores/world'
 import { REALMS, QUALITIES } from '@/types/game'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PlayerPanel from '@/components/PlayerPanel.vue'
 import BattlePanel from '@/components/BattlePanel.vue'
-import WorldPanel from '@/components/WorldPanel.vue'
 import InventoryPanel from '@/components/InventoryPanel.vue'
 import SpiritBar from '@/components/SpiritBar.vue'
 import ShopView from '@/views/ShopView.vue'
 import PetView from '@/views/PetView.vue'
 import FormationPanel from '@/components/FormationPanel.vue'
+import SecretRealmPanel from '@/components/SecretRealmPanel.vue'
 
 const playerStore = usePlayerStore()
 const battleStore = useBattleStore()
-const worldStore = useWorldStore()
 
 const activeTab = ref('battle')
 const autoSaveTimer = ref<number | null>(null)
@@ -37,7 +35,7 @@ onUnmounted(() => {
 
 const tabs = [
   { name: 'battle', label: '修炼', icon: 'MagicStick' },
-  { name: 'world', label: '探索', icon: 'Location' },
+  { name: 'secretRealm', label: '秘境', icon: 'MagicHat' },
   { name: 'inventory', label: '背包', icon: 'Goods' },
   { name: 'pet', label: '灵宠', icon: 'Chicken' },
   { name: 'formation', label: '阵法', icon: 'Grid' },
@@ -182,7 +180,7 @@ function handleImportSave() {
         <!-- Tab内容 -->
         <div class="tab-content">
           <BattlePanel v-show="activeTab === 'battle'" />
-          <WorldPanel v-show="activeTab === 'world'" />
+          <SecretRealmPanel v-show="activeTab === 'secretRealm'" />
           <InventoryPanel v-show="activeTab === 'inventory'" />
           <PetView v-show="activeTab === 'pet'" />
           <FormationPanel v-show="activeTab === 'formation'" />

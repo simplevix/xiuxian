@@ -223,10 +223,21 @@ export const useBattleStore = defineStore('battle', () => {
         } else if (drop.type && drop.quality) {
           const playerLevel = playerStore.totalLevel
           const equip = generateEquipment(drop.type, drop.quality, playerLevel)
-          playerStore.player?.inventory.push(equip)
-          const qualityName = QUALITIES[drop.quality].name
-          const equipPrefix = equip.setId ? '【套装】' : ''
-          addLog(`✨ 获得${equipPrefix}${qualityName}装备 【${equip.name}】！`, 'drop')
+          
+          // 检查自动出售设置
+          const autoSellResult = playerStore.processAutoSell(equip)
+          
+          if (autoSellResult.sold) {
+            // 自动出售
+            const qualityName = QUALITIES[drop.quality].name
+            addLog(`💰 自动出售${qualityName}装备 【${equip.name}】，获得 ${autoSellResult.price} 灵石`, 'drop')
+          } else {
+            // 放入背包
+            playerStore.player?.inventory.push(equip)
+            const qualityName = QUALITIES[drop.quality].name
+            const equipPrefix = equip.setId ? '【套装】' : ''
+            addLog(`✨ 获得${equipPrefix}${qualityName}装备 【${equip.name}】！`, 'drop')
+          }
         }
       }
     }

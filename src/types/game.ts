@@ -1288,9 +1288,19 @@ export interface Player {
   injuries: any[]        // 伤势列表
   learnedSkills: string[] // 已学习的技能ID
   
-  // 游戏系统管理器（运行时，不保存）
-  gameSystem?: any
+  // 自动出售设置
+  autoSellSetting?: AutoSellSetting
 }
+
+// 自动出售设置
+export interface AutoSellSetting {
+  enabled: boolean        // 是否启用自动出售
+  minQuality: EquipmentQuality  // 低于此品质的装备自动出售（不包括此品质）
+  sellSetEquipment: boolean     // 是否自动出售套装装备
+}
+
+// 装备品质类型
+export type EquipmentQuality = 'common' | 'good' | 'rare' | 'epic' | 'legendary'
 
 // 怪物
 export interface Monster {

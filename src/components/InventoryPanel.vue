@@ -1,15 +1,78 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { usePlayerStore } from '@/stores/player'
 import { QUALITIES, SET_CONFIGS, TECHNIQUE_QUALITIES } from '@/types/game'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import type { Equipment, EquipmentType, Technique } from '@/types/game'
+import type { Equipment, EquipmentType, EquipmentSlots, Technique, EquipmentQuality } from '@/types/game'
+
+// 自动出售设置
+const autoSellEnabled = ref(false)
+const autoSellMinQuality = ref<EquipmentQuality>('common')
+const autoSellSellSetEquipment = ref(false)
+
+// 初始化自动出售设置
+function initAutoSellSettings() {
+  if (player.value?.autoSellSetting) {
+    autoSellEnabled.value = player.value.autoSellSetting.enabled
+    autoSellMinQuality.value = player.value.autoSellSetting.minQuality
+    autoSellSellSetEquipment.value = player.value.autoSellSetting.sellSetEquipment
+  }
+}
+
+// 监听 player 变化，初始化设置
+const autoSellInitialized = ref(false)
+watch(() => player.value, () => {
+  if (player.value && !autoSellInitialized.value) {
+    initAutoSellSettings()
+    autoSellInitialized.value = true
+  }
+}, { immediate: true })
+
+// 更新自动出售设置
+function updateAutoSell() {
+  playerStore.updateAutoSellSetting({
+    enabled: autoSellEnabled.value,
+    minQuality: autoSellMinQuality.value,
+    sellSetEquipment: autoSellSellSetEquipment.value
+  })
+  if (autoSellEnabled.value) {
+    ElMessage.success('自动出售已开启')
+  } else {
+    ElMessage.info('自动出售已关闭')
+  }
+}
+
+// 手动执行一键自动出售
+function executeAutoSell() {
+  const result = playerStore.sellInventoryByAutoSettings()
+  if (result.count > 0) {
+    ElMessage.success(`已自动出售 ${result.count} 件装备，获得 ${result.price} 灵石`)
+  } else {
+    ElMessage.info('没有符合自动出售条件的装备')
+  }
+}
+
+// 品质选项
+const qualityOptions: EquipmentQuality[] = ['common', 'good', 'rare', 'epic', 'legendary']
+
+function getQualityLabel(quality: EquipmentQuality): string {
+  return QUALITIES[quality]?.name || '普通'
+}
 
 const playerStore = usePlayerStore()
 const player = computed(() => playerStore.player)
 
 const inventory = computed(() => player.value?.inventory || [])
-const equipped = computed(() => player.value?.equipment || [])
+const equipped = computed(() => player.value?.equipment || {
+  weapon: undefined,
+  armor: undefined,
+  helmet: undefined,
+  pants: undefined,
+  boots: undefined,
+  necklace: undefined,
+  ring1: undefined,
+  ring2: undefined
+} as EquipmentSlots)
 
 // 功法相关
 const learnedTechniques = computed(() => player.value?.techniques || [])
@@ -124,7 +187,7 @@ function equipItem(item: Equipment) {
   ElMessage.success(`已装备 ${item.name}`)
 }
 
-function unequipItem(slot: EquipmentType) {
+function unequipItem(slot: string) {
   playerStore.unequipItem(slot as any)
   ElMessage.info('已卸下装备')
 }
@@ -294,6 +357,10 @@ function selectCategoryForSell(key: string) {
 
 // ==================== 装备强化功能 ====================
 const enhancingItem = ref<Equipment | null>(null)
+const showEnhanceDialog = computed({
+  get: () => enhancingItem.value !== null,
+  set: (val: boolean) => { if (!val) closeEnhanceDialog() }
+})
 
 function getEnhancementCost(level: number): number {
   return playerStore.getEnhancementCost(level)
@@ -368,6 +435,44 @@ function enhanceEquippedItem(slotKey: string) {
     ElMessage.error(result.message)
   }
 }
+
+// ==================== 装备详情对话框 ====================
+const selectedEquip = ref<Equipment | null>(null)
+const selectedEquipSlot = ref<string>('')
+const showEquipDetailDialog = ref(false)
+
+function openEquipDetail(item: Equipment, slot: string) {
+  selectedEquip.value = item
+  selectedEquipSlot.value = slot
+  showEquipDetailDialog.value = true
+}
+
+function closeEquipDetail() {
+  selectedEquip.value = null
+  selectedEquipSlot.value = ''
+  showEquipDetailDialog.value = false
+}
+
+function handleEquipAction(action: 'detail' | 'enhance' | 'unequip') {
+  if (!selectedEquip.value) return
+
+  const item = selectedEquip.value
+  closeEquipDetail()
+
+  if (action === 'detail') {
+    openEnhanceDialog(item)
+  } else if (action === 'enhance') {
+    openEnhanceDialog(item)
+  } else if (action === 'unequip') {
+    unequipItem(selectedEquipSlot.value)
+  }
+}
+
+// 点击空槽位的处理
+function handleEmptySlotClick(slot: string) {
+  // 空槽位可以提示穿上装备
+  ElMessage.info('从背包中选择装备进行穿戴')
+}
 </script>
 
 <template>
@@ -378,12 +483,13 @@ function enhanceEquippedItem(slotKey: string) {
       <div class="human-figure">
         <!-- 头部区域 -->
         <div class="figure-row head-row">
-          <div class="equip-slot helmet-slot" @click="equipped.helmet && unequipItem('helmet')">
+          <div class="equip-slot helmet-slot" @click="equipped.helmet ? openEquipDetail(equipped.helmet, 'helmet') : handleEmptySlotClick('helmet')">
             <template v-if="equipped.helmet">
               <div class="slot-content equipped" :style="{ borderColor: getQualityColor(equipped.helmet.quality) }">
                 <span class="slot-icon">🪖</span>
                 <span class="item-name" :style="{ color: getQualityColor(equipped.helmet.quality) }">{{ equipped.helmet.name }}</span>
                 <span class="item-bonus">+{{ equipped.helmet.attackBonus }}/{{ equipped.helmet.defenseBonus }}</span>
+                <span v-if="(equipped.helmet.enhancementLevel || 0) > 0" class="slot-enhance-badge">+{{ equipped.helmet.enhancementLevel }}</span>
               </div>
             </template>
             <template v-else>
@@ -397,12 +503,13 @@ function enhanceEquippedItem(slotKey: string) {
 
         <!-- 项链 + 武器 -->
         <div class="figure-row middle-row">
-          <div class="equip-slot necklace-slot" @click="equipped.necklace && unequipItem('necklace')">
+          <div class="equip-slot necklace-slot" @click="equipped.necklace ? openEquipDetail(equipped.necklace, 'necklace') : handleEmptySlotClick('necklace')">
             <template v-if="equipped.necklace">
               <div class="slot-content equipped" :style="{ borderColor: getQualityColor(equipped.necklace.quality) }">
                 <span class="slot-icon">📿</span>
                 <span class="item-name" :style="{ color: getQualityColor(equipped.necklace.quality) }">{{ equipped.necklace.name }}</span>
                 <span class="item-bonus">+{{ equipped.necklace.hpBonus }}❤️</span>
+                <span v-if="(equipped.necklace.enhancementLevel || 0) > 0" class="slot-enhance-badge">+{{ equipped.necklace.enhancementLevel }}</span>
               </div>
             </template>
             <template v-else>
@@ -422,12 +529,13 @@ function enhanceEquippedItem(slotKey: string) {
             </div>
           </div>
 
-          <div class="equip-slot weapon-slot" @click="equipped.weapon && unequipItem('weapon')">
+          <div class="equip-slot weapon-slot" @click="equipped.weapon ? openEquipDetail(equipped.weapon, 'weapon') : handleEmptySlotClick('weapon')">
             <template v-if="equipped.weapon">
               <div class="slot-content equipped weapon" :style="{ borderColor: getQualityColor(equipped.weapon.quality) }">
                 <span class="slot-icon">⚔️</span>
                 <span class="item-name" :style="{ color: getQualityColor(equipped.weapon.quality) }">{{ equipped.weapon.name }}</span>
                 <span class="item-bonus">+{{ equipped.weapon.attackBonus }}⚔️</span>
+                <span v-if="(equipped.weapon.enhancementLevel || 0) > 0" class="slot-enhance-badge">+{{ equipped.weapon.enhancementLevel }}</span>
               </div>
             </template>
             <template v-else>
@@ -441,12 +549,13 @@ function enhanceEquippedItem(slotKey: string) {
 
         <!-- 胸甲 -->
         <div class="figure-row chest-row">
-          <div class="equip-slot armor-slot" @click="equipped.armor && unequipItem('armor')">
+          <div class="equip-slot armor-slot" @click="equipped.armor ? openEquipDetail(equipped.armor, 'armor') : handleEmptySlotClick('armor')">
             <template v-if="equipped.armor">
               <div class="slot-content equipped" :style="{ borderColor: getQualityColor(equipped.armor.quality) }">
                 <span class="slot-icon">🛡️</span>
                 <span class="item-name" :style="{ color: getQualityColor(equipped.armor.quality) }">{{ equipped.armor.name }}</span>
                 <span class="item-bonus">+{{ equipped.armor.defenseBonus }}/{{ equipped.armor.hpBonus }}❤️</span>
+                <span v-if="(equipped.armor.enhancementLevel || 0) > 0" class="slot-enhance-badge">+{{ equipped.armor.enhancementLevel }}</span>
               </div>
             </template>
             <template v-else>
@@ -460,12 +569,13 @@ function enhanceEquippedItem(slotKey: string) {
 
         <!-- 裤子 -->
         <div class="figure-row pants-row">
-          <div class="equip-slot pants-slot" @click="equipped.pants && unequipItem('pants')">
+          <div class="equip-slot pants-slot" @click="equipped.pants ? openEquipDetail(equipped.pants, 'pants') : handleEmptySlotClick('pants')">
             <template v-if="equipped.pants">
               <div class="slot-content equipped" :style="{ borderColor: getQualityColor(equipped.pants.quality) }">
                 <span class="slot-icon">👖</span>
                 <span class="item-name" :style="{ color: getQualityColor(equipped.pants.quality) }">{{ equipped.pants.name }}</span>
                 <span class="item-bonus">+{{ equipped.pants.defenseBonus }}🛡️</span>
+                <span v-if="(equipped.pants.enhancementLevel || 0) > 0" class="slot-enhance-badge">+{{ equipped.pants.enhancementLevel }}</span>
               </div>
             </template>
             <template v-else>
@@ -479,12 +589,13 @@ function enhanceEquippedItem(slotKey: string) {
 
         <!-- 靴子 + 戒指 -->
         <div class="figure-row bottom-row">
-          <div class="equip-slot boots-slot" @click="equipped.boots && unequipItem('boots')">
+          <div class="equip-slot boots-slot" @click="equipped.boots ? openEquipDetail(equipped.boots, 'boots') : handleEmptySlotClick('boots')">
             <template v-if="equipped.boots">
               <div class="slot-content equipped" :style="{ borderColor: getQualityColor(equipped.boots.quality) }">
                 <span class="slot-icon">👢</span>
                 <span class="item-name" :style="{ color: getQualityColor(equipped.boots.quality) }">{{ equipped.boots.name }}</span>
                 <span class="item-bonus">+{{ equipped.boots.defenseBonus }}</span>
+                <span v-if="(equipped.boots.enhancementLevel || 0) > 0" class="slot-enhance-badge">+{{ equipped.boots.enhancementLevel }}</span>
               </div>
             </template>
             <template v-else>
@@ -496,11 +607,12 @@ function enhanceEquippedItem(slotKey: string) {
           </div>
 
           <div class="ring-slots">
-            <div class="equip-slot ring1-slot" @click="equipped.ring1 && unequipItem('ring1')">
+            <div class="equip-slot ring1-slot" @click="equipped.ring1 ? openEquipDetail(equipped.ring1, 'ring1') : handleEmptySlotClick('ring1')">
               <template v-if="equipped.ring1">
                 <div class="slot-content equipped small" :style="{ borderColor: getQualityColor(equipped.ring1.quality) }">
                   <span class="slot-icon">💍</span>
                   <span class="item-name small" :style="{ color: getQualityColor(equipped.ring1.quality) }">{{ equipped.ring1.name }}</span>
+                  <span v-if="(equipped.ring1.enhancementLevel || 0) > 0" class="slot-enhance-badge small">+{{ equipped.ring1.enhancementLevel }}</span>
                 </div>
               </template>
               <template v-else>
@@ -510,11 +622,12 @@ function enhanceEquippedItem(slotKey: string) {
                 </div>
               </template>
             </div>
-            <div class="equip-slot ring2-slot" @click="equipped.ring2 && unequipItem('ring2')">
+            <div class="equip-slot ring2-slot" @click="equipped.ring2 ? openEquipDetail(equipped.ring2, 'ring2') : handleEmptySlotClick('ring2')">
               <template v-if="equipped.ring2">
                 <div class="slot-content equipped small" :style="{ borderColor: getQualityColor(equipped.ring2.quality) }">
                   <span class="slot-icon">💍</span>
                   <span class="item-name small" :style="{ color: getQualityColor(equipped.ring2.quality) }">{{ equipped.ring2.name }}</span>
+                  <span v-if="(equipped.ring2.enhancementLevel || 0) > 0" class="slot-enhance-badge small">+{{ equipped.ring2.enhancementLevel }}</span>
                 </div>
               </template>
               <template v-else>
@@ -577,10 +690,58 @@ function enhanceEquippedItem(slotKey: string) {
         <span class="stone-count">💎 {{ player.spiritStones }} 灵石</span>
       </div>
 
+      <!-- 自动出售设置 -->
+      <div class="auto-sell-section">
+        <div class="auto-sell-header">
+          <span class="auto-sell-title">🤖 自动出售</span>
+          <el-switch
+            v-model="autoSellEnabled"
+            size="small"
+            @change="updateAutoSell"
+            active-text="开启"
+            inactive-text="关闭"
+          />
+        </div>
+        <div class="auto-sell-settings" v-if="autoSellEnabled">
+          <div class="setting-row">
+            <span class="setting-label">自动出售</span>
+            <el-select 
+              v-model="autoSellMinQuality" 
+              size="small" 
+              class="quality-select"
+              @change="updateAutoSell"
+            >
+              <el-option
+                v-for="q in qualityOptions"
+                :key="q"
+                :label="getQualityLabel(q)"
+                :value="q"
+              >
+                <span :style="{ color: QUALITIES[q].color }">{{ getQualityLabel(q) }}</span>
+              </el-option>
+            </el-select>
+            <span class="setting-desc">以下的装备</span>
+          </div>
+          <div class="setting-row">
+            <span class="setting-label">套装装备</span>
+            <el-switch
+              v-model="autoSellSellSetEquipment"
+              size="small"
+              @change="updateAutoSell"
+              active-text="自动出售"
+              inactive-text="保留"
+            />
+          </div>
+          <el-button type="warning" size="small" plain @click="executeAutoSell" class="execute-btn">
+            一键出售背包中符合条件的装备
+          </el-button>
+        </div>
+      </div>
+
       <!-- 一键出售区域 -->
       <div class="quick-sell-section">
         <div class="quick-sell-header">
-          <div class="quick-sell-title">💰 一键出售</div>
+          <span class="quick-sell-title">💰 一键出售</span>
           <el-button type="info" size="small" plain @click="sellAllExceptLegendary" v-if="inventory.filter(i => i.quality !== 'legendary').length > 0">
             出售全部非仙器
           </el-button>
@@ -822,9 +983,94 @@ function enhanceEquippedItem(slotKey: string) {
       </div>
     </div>
 
+    <!-- 装备详情对话框 -->
+    <el-dialog
+      v-model="showEquipDetailDialog"
+      :title="selectedEquip ? `📦 ${selectedEquip.name}` : '装备详情'"
+      width="420px"
+      @close="closeEquipDetail"
+    >
+      <div v-if="selectedEquip" class="equip-detail-content">
+        <div class="detail-header">
+          <div class="detail-quality-badge" :style="{ backgroundColor: getQualityColor(selectedEquip.quality) }">
+            {{ getQualityName(selectedEquip.quality) }}
+          </div>
+          <div class="detail-type">{{ getEquipTypeName(selectedEquip.type) }}</div>
+          <span v-if="isSetEquipment(selectedEquip)" class="detail-set-tag" :style="{ color: getSetColor(selectedEquip.setId) }">
+            【{{ getSetName(selectedEquip.setId) }}】
+          </span>
+          <span v-if="(selectedEquip.enhancementLevel || 0) > 0" class="detail-enhance-tag">
+            +{{ selectedEquip.enhancementLevel }}
+          </span>
+        </div>
+
+        <div class="detail-stats-section">
+          <div class="detail-stats-title">📊 属性</div>
+          <div class="detail-stats-grid">
+            <div class="detail-stat-item">
+              <span class="stat-icon">⚔️</span>
+              <span class="stat-label">攻击</span>
+              <span class="stat-value" :class="{ enhanced: (selectedEquip.enhancementLevel || 0) > 0 }">
+                +{{ (selectedEquip.enhancementLevel || 0) > 0 ? getEnhancedBonus(selectedEquip).attack : selectedEquip.attackBonus }}
+                <span v-if="(selectedEquip.enhancementLevel || 0) > 0" class="stat-original">
+                  ({{ selectedEquip.attackBonus }})
+                </span>
+              </span>
+            </div>
+            <div class="detail-stat-item">
+              <span class="stat-icon">🛡️</span>
+              <span class="stat-label">防御</span>
+              <span class="stat-value" :class="{ enhanced: (selectedEquip.enhancementLevel || 0) > 0 }">
+                +{{ (selectedEquip.enhancementLevel || 0) > 0 ? getEnhancedBonus(selectedEquip).defense : selectedEquip.defenseBonus }}
+                <span v-if="(selectedEquip.enhancementLevel || 0) > 0" class="stat-original">
+                  ({{ selectedEquip.defenseBonus }})
+                </span>
+              </span>
+            </div>
+            <div class="detail-stat-item">
+              <span class="stat-icon">❤️</span>
+              <span class="stat-label">生命</span>
+              <span class="stat-value" :class="{ enhanced: (selectedEquip.enhancementLevel || 0) > 0 }">
+                +{{ (selectedEquip.enhancementLevel || 0) > 0 ? getEnhancedBonus(selectedEquip).hp : selectedEquip.hpBonus }}
+                <span v-if="(selectedEquip.enhancementLevel || 0) > 0" class="stat-original">
+                  ({{ selectedEquip.hpBonus }})
+                </span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="detail-enhance-info" v-if="(selectedEquip.enhancementLevel || 0) > 0">
+          <div class="enhance-info-title">🔨 强化信息</div>
+          <div class="enhance-level-display">
+            强化等级: <span class="level-highlight">+{{ selectedEquip.enhancementLevel }}</span>
+          </div>
+          <div class="enhance-multiplier">
+            属性倍率: <span class="multiplier-value">{{ (getEnhancementMultiplier(selectedEquip.enhancementLevel!) * 100).toFixed(0) }}%</span>
+          </div>
+        </div>
+
+        <div class="detail-sell-price">
+          💰 出售价格: <strong>{{ selectedEquip.setId ? (playerStore.getEquipmentSellPrice ? playerStore.getEquipmentSellPrice(selectedEquip) : 1000) : (playerStore.getEquipmentSellPrice ? playerStore.getEquipmentSellPrice(selectedEquip) : 500) }}</strong> 灵石
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="detail-dialog-footer">
+          <el-button @click="closeEquipDetail">关闭</el-button>
+          <el-button type="danger" plain @click="handleEquipAction('unequip')" v-if="selectedEquipSlot !== ''">
+            卸下
+          </el-button>
+          <el-button type="warning" @click="handleEquipAction('enhance')">
+            🔨 强化
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
+
     <!-- 强化对话框 -->
     <el-dialog
-      v-model="enhancingItem !== null"
+      v-model="showEnhanceDialog"
       :title="enhancingItem ? `🔨 强化装备 - ${enhancingItem.name}` : '强化装备'"
       width="400px"
       @close="closeEnhanceDialog"
@@ -1023,6 +1269,177 @@ function enhanceEquippedItem(slotKey: string) {
   font-size: 0.75rem;
 }
 
+/* 装备槽强化标签 */
+.slot-enhance-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 5px;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  border-radius: 8px;
+  color: white;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+.slot-enhance-badge.small {
+  font-size: 0.6rem;
+  padding: 1px 4px;
+}
+
+/* 装备详情对话框样式 */
+.equip-detail-content {
+  padding: 8px 0;
+}
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-bottom: 16px;
+  border-bottom: 1px dashed var(--border-color);
+  margin-bottom: 16px;
+}
+
+.detail-quality-badge {
+  padding: 4px 12px;
+  border-radius: 12px;
+  color: white;
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.detail-type {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.detail-set-tag {
+  font-weight: 600;
+  font-size: 0.85rem;
+}
+
+.detail-enhance-tag {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #f59e0b;
+}
+
+.detail-stats-section {
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.detail-stats-title {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+}
+
+.detail-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+.detail-stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 12px;
+  background: var(--bg-card);
+  border-radius: 10px;
+}
+
+.detail-stat-item .stat-icon {
+  font-size: 1.2rem;
+}
+
+.detail-stat-item .stat-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.detail-stat-item .stat-value {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--accent-cyan);
+}
+
+.detail-stat-item .stat-value.enhanced {
+  color: #f59e0b;
+}
+
+.detail-stat-item .stat-original {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  font-weight: normal;
+}
+
+.detail-enhance-info {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(217, 119, 6, 0.1) 100%);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.enhance-info-title {
+  font-size: 0.85rem;
+  color: #f59e0b;
+  margin-bottom: 8px;
+}
+
+.enhance-level-display {
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.level-highlight {
+  font-weight: 700;
+  color: #f59e0b;
+}
+
+.enhance-multiplier {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.multiplier-value {
+  font-weight: 600;
+  color: #f59e0b;
+}
+
+.detail-sell-price {
+  text-align: center;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border-radius: 10px;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.detail-sell-price strong {
+  color: var(--accent-gold);
+}
+
+.detail-dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.detail-dialog-footer .el-button {
+  min-width: 80px;
+}
+
 .human-figure {
   display: flex;
   flex-direction: column;
@@ -1149,6 +1566,62 @@ function enhanceEquippedItem(slotKey: string) {
   flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 12px;
+}
+
+/* 自动出售设置样式 */
+.auto-sell-section {
+  background: linear-gradient(135deg, rgba(156, 163, 175, 0.1) 0%, rgba(107, 114, 128, 0.1) 100%);
+  border: 1px solid rgba(156, 163, 175, 0.25);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.auto-sell-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.auto-sell-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.auto-sell-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(156, 163, 175, 0.3);
+}
+
+.setting-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.setting-label {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  min-width: 60px;
+}
+
+.setting-desc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.quality-select {
+  width: 100px;
+}
+
+.execute-btn {
+  margin-top: 4px;
+  width: 100%;
 }
 
 /* 一键出售样式 */
@@ -1328,14 +1801,16 @@ function enhanceEquippedItem(slotKey: string) {
 
 .inventory-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
   gap: 12px;
 }
 
 .inventory-item {
-  padding: 12px;
+  padding: 10px;
   border-left: 3px solid;
   transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
 }
 
 .inventory-item:hover {
@@ -1346,9 +1821,10 @@ function enhanceEquippedItem(slotKey: string) {
 .item-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.8rem;
-  margin-bottom: 6px;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 0.75rem;
+  margin-bottom: 4px;
 }
 
 .item-type-icon {
@@ -1392,9 +1868,9 @@ function enhanceEquippedItem(slotKey: string) {
 }
 
 .item-set-name {
-  font-size: 0.72rem;
+  font-size: 0.68rem;
   color: var(--text-secondary);
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   font-style: italic;
 }
 
@@ -1407,28 +1883,33 @@ function enhanceEquippedItem(slotKey: string) {
 }
 
 .item-name {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   font-weight: 500;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
+  line-height: 1.2;
 }
 
 .item-stats {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
-  font-size: 0.75rem;
+  gap: 4px;
+  font-size: 0.7rem;
   color: var(--text-secondary);
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
 .item-actions {
   display: flex;
-  gap: 6px;
+  gap: 4px;
+  margin-top: auto;
+  padding-top: 8px;
 }
 
 .item-actions .el-button {
   flex: 1;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
+  padding: 4px 8px;
+  min-height: 26px;
 }
 
 .empty-inventory {
