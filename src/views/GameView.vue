@@ -1,22 +1,15 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
-import { useBattleStore } from '@/stores/battle'
-import { REALMS, QUALITIES } from '@/types/game'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import PlayerPanel from '@/components/PlayerPanel.vue'
-import BattlePanel from '@/components/BattlePanel.vue'
-import InventoryPanel from '@/components/InventoryPanel.vue'
 import SpiritBar from '@/components/SpiritBar.vue'
-import ShopView from '@/views/ShopView.vue'
-import PetView from '@/views/PetView.vue'
-import FormationPanel from '@/components/FormationPanel.vue'
-import SecretRealmPanel from '@/components/SecretRealmPanel.vue'
 
 const playerStore = usePlayerStore()
-const battleStore = useBattleStore()
+const router = useRouter()
+const route = useRoute()
 
-const activeTab = ref('battle')
 const autoSaveTimer = ref<number | null>(null)
 
 onMounted(() => {
@@ -34,12 +27,12 @@ onUnmounted(() => {
 })
 
 const tabs = [
-  { name: 'battle', label: '修炼', icon: 'MagicStick' },
-  { name: 'secretRealm', label: '秘境', icon: 'MagicHat' },
-  { name: 'inventory', label: '背包', icon: 'Goods' },
-  { name: 'pet', label: '灵宠', icon: 'Chicken' },
-  { name: 'formation', label: '阵法', icon: 'Grid' },
-  { name: 'shop', label: '商店', icon: 'Shop' }
+  { name: 'battle', label: '修炼', icon: 'MagicStick', route: '/game/battle' },
+  { name: 'secretRealm', label: '秘境', icon: 'MagicHat', route: '/game/secret-realm' },
+  { name: 'inventory', label: '背包', icon: 'Goods', route: '/game/inventory' },
+  { name: 'pet', label: '灵宠', icon: 'Chicken', route: '/game/pet' },
+  { name: 'formation', label: '阵法', icon: 'Grid', route: '/game/formation' },
+  { name: 'shop', label: '商店', icon: 'Shop', route: '/game/shop' }
 ]
 
 function handleBreakThrough() {
@@ -69,7 +62,7 @@ async function handleReset() {
       { confirmButtonText: '确定重置', cancelButtonText: '取消', type: 'warning' }
     )
     await playerStore.deleteGame()
-    window.location.reload()
+    router.push('/')
   } catch {
     // 取消
   }
@@ -137,6 +130,9 @@ function handleImportSave() {
         <SpiritBar />
       </div>
       <div class="header-right">
+        <router-link to="/" class="back-home-btn" title="返回首页">
+          <el-icon><HomeFilled /></el-icon>
+        </router-link>
         <el-button text @click="handleExportSave" title="导出存档">
           <el-icon><Download /></el-icon>
         </el-button>
@@ -166,25 +162,20 @@ function handleImportSave() {
       <section class="main-content">
         <!-- Tab导航 -->
         <nav class="tab-nav">
-          <button
+          <router-link
             v-for="tab in tabs"
             :key="tab.name"
-            :class="['tab-btn', { active: activeTab === tab.name }]"
-            @click="activeTab = tab.name"
+            :to="tab.route"
+            :class="['tab-btn', { active: route.path.startsWith(tab.route) }]"
           >
             <el-icon><component :is="tab.icon" /></el-icon>
             {{ tab.label }}
-          </button>
+          </router-link>
         </nav>
 
-        <!-- Tab内容 -->
+        <!-- 路由内容 -->
         <div class="tab-content">
-          <BattlePanel v-show="activeTab === 'battle'" />
-          <SecretRealmPanel v-show="activeTab === 'secretRealm'" />
-          <InventoryPanel v-show="activeTab === 'inventory'" />
-          <PetView v-show="activeTab === 'pet'" />
-          <FormationPanel v-show="activeTab === 'formation'" />
-          <ShopView v-show="activeTab === 'shop'" />
+          <router-view />
         </div>
       </section>
     </main>

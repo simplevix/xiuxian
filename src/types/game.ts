@@ -1232,6 +1232,7 @@ export interface Pet {
 export interface Player {
   id: string
   name: string
+  userId?: string  // 绑定的用户ID（用于账号关联）
   realmIndex: number
   realmLevel: number
   level: number  // 总等级
@@ -1386,8 +1387,8 @@ export const SCENES: Scene[] = [
     artifacts: ['silver_sword', 'azure_cloud_sword', 'phoenix_flame_fan', 'moonlight_robe', 'golden_bell', 'jade_spirit_bottle', 'crimson_blade', 'frost_pendant', 'wind_ruler', 'earth_gem', 'herb_sprout_bottle', 'thunder_eye', 'spirit_banner', 'nine_clover', 'black_iron_hammer', 'cloud_step_shoes', 'dragon_scale_armor', 'blood_flower', 'five_thunder_whip', 'spirit_binding_net', 'pure_essence_bottle', 'jade_bottle', 'tower_essence'],
     monsters: [
       // 小怪等级11-19级
-      { id: 'mist_wolf', name: '雾狼', level: 11, hp: 280, maxHp: 280, attack: 45, defense: 18, expReward: 100, stoneReward: 50, boss: false, dropTable: [{ chance: 0.15, quality: 'good', type: 'weapon' }, { chance: 0.08, type: 'artifact', itemId: 'silver_sword', chance: 0.03 }] },
-      { id: 'poison_frog', name: '毒蛙', level: 12, hp: 250, maxHp: 250, attack: 50, defense: 15, expReward: 110, stoneReward: 55, boss: false, dropTable: [{ chance: 0.16, quality: 'good', type: 'ring' }, { chance: 0.08, type: 'artifact', itemId: 'azure_cloud_sword', chance: 0.03 }] },
+      { id: 'mist_wolf', name: '雾狼', level: 11, hp: 280, maxHp: 280, attack: 45, defense: 18, expReward: 100, stoneReward: 50, boss: false, dropTable: [{ chance: 0.15, quality: 'rare', type: 'weapon' }, { chance: 0.08, type: 'artifact', itemId: 'silver_sword', chance: 0.03 }] },
+      { id: 'poison_frog', name: '毒蛙', level: 12, hp: 250, maxHp: 250, attack: 50, defense: 15, expReward: 110, stoneReward: 55, boss: false, dropTable: [{ chance: 0.16, quality: 'rare', type: 'ring' }, { chance: 0.08, type: 'artifact', itemId: 'azure_cloud_sword', chance: 0.03 }] },
       { id: 'wind_eagle', name: '风鹰', level: 13, hp: 320, maxHp: 320, attack: 58, defense: 20, expReward: 125, stoneReward: 62, boss: false, dropTable: [{ chance: 0.18, quality: 'rare', type: 'boots' }, { chance: 0.08, type: 'artifact', itemId: 'phoenix_flame_fan', chance: 0.03 }] },
       { id: 'stone_golem', name: '石傀', level: 14, hp: 450, maxHp: 450, attack: 55, defense: 35, expReward: 140, stoneReward: 70, boss: false, dropTable: [{ chance: 0.2, quality: 'rare', type: 'armor' }, { chance: 0.08, type: 'artifact', itemId: 'moonlight_robe', chance: 0.03 }] },
       { id: 'earth_bear', name: '岩熊', level: 15, hp: 550, maxHp: 550, attack: 65, defense: 40, expReward: 160, stoneReward: 80, boss: false, dropTable: [{ chance: 0.22, quality: 'rare', type: 'helmet' }, { chance: 0.08, type: 'artifact', itemId: 'golden_bell', chance: 0.03 }] },

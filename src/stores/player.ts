@@ -4,6 +4,7 @@ import type { Player, Equipment, Pet, Artifact, EquipmentSlots, SetConfig, Techn
 import { REALMS, SET_CONFIGS, FORMATION_CONFIGS } from '@/types/game'
 import { generateId } from '@/utils/random'
 import { savePlayerData as saveToDB, loadPlayerData as loadFromDB, deletePlayerData as deleteFromDB, initSaveManager } from '@/utils/saveManager'
+import { useAuthStore } from './auth'
 
 const STORAGE_KEY = 'xiantu_player' // 保留作为 localStorage 兼容的 fallback
 
@@ -18,6 +19,8 @@ export const usePlayerStore = defineStore('player', () => {
     return player.value.realmIndex * 10 + player.value.realmLevel + 1
   })
 
+  // 检查玩家是否已绑定账号
+  const hasAccount = computed(() => !!player.value?.userId)
   // 检查玩家是否有角色
   const hasCharacter = computed(() => !!player.value)
 
@@ -257,7 +260,10 @@ export const usePlayerStore = defineStore('player', () => {
   // 境界进度上限
   const realmProgressMax = computed(() => currentRealm.value?.realmLevelCap || 10)
 
-  function createPlayer(name: string) {
+  function createPlayer(name: string, userId?: string) {
+    const authStore = useAuthStore()
+    const boundUserId = userId || authStore.currentUser?.id
+
     // 初始化阵法（新角色默认解锁并激活第一个阵法）
     const firstFormation = FORMATION_CONFIGS[0]
     const initialFormation: PlayerFormation = {
@@ -273,6 +279,7 @@ export const usePlayerStore = defineStore('player', () => {
     player.value = {
       id: generateId(),
       name,
+      userId: boundUserId,
       realmIndex: 0,
       realmLevel: 0,  // 境界进度（层数）
       level: 1,       // 总等级
@@ -329,6 +336,14 @@ export const usePlayerStore = defineStore('player', () => {
     
     startCultivation()
     saveGame()
+  }
+
+  // 绑定到账号
+  function bindToAccount(userId: string) {
+    if (player.value) {
+      player.value.userId = userId
+      saveGame()
+    }
   }
   
   // 初始化游戏系统（Engine层）
@@ -939,27 +954,27 @@ export const usePlayerStore = defineStore('player', () => {
     }
   }
 
-  // 保存游戏（IndexedDB + localStorage 双写，确保安全）
+  // 保存游戏（后端 SQLite + localStorage 双写）
   async function saveGame() {
     if (player.value) {
       player.value.lastOnline = Date.now()
       const data = player.value
       const characterName = player.value.name
 
-      // 同时写入 IndexedDB 和 localStorage（双保险）
+      // 写入后端 SQLite
       try {
         await saveToDB(characterName, data)
       } catch (e) {
-        console.error('IndexedDB 保存失败，回退到 localStorage:', e)
+        console.error('后端保存失败，回退到 localStorage:', e)
       }
-      // localStorage 作为备份
+      // localStorage 作为本地备份
       localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
     }
   }
 
-  // 加载游戏（优先 IndexedDB，回退 localStorage）
+  // 加载游戏（优先后端 SQLite，回退 localStorage）
   async function loadGame(): Promise<boolean> {
-    // 1. 先尝试从 IndexedDB 加载
+    // 1. 先尝试从后端 SQLite 加载
     try {
       if (player.value?.name) {
         const data = await loadFromDB(player.value.name)
@@ -970,7 +985,7 @@ export const usePlayerStore = defineStore('player', () => {
         }
       }
     } catch (e) {
-      console.warn('IndexedDB 加载失败，尝试 localStorage:', e)
+      console.warn('后端加载失败，尝试 localStorage:', e)
     }
 
     // 2. 回退到 localStorage
@@ -979,11 +994,11 @@ export const usePlayerStore = defineStore('player', () => {
       try {
         player.value = JSON.parse(saved)
 
-        // 将 localStorage 存档同步到 IndexedDB（自动迁移）
+        // 将 localStorage 存档同步到后端（自动迁移）
         try {
           await saveToDB(player.value.name, player.value)
         } catch (e) {
-          console.warn('localStorage → IndexedDB 同步失败:', e)
+          console.warn('localStorage → 后端同步失败:', e)
         }
 
         applySaveCompatAndStart()
@@ -1093,14 +1108,14 @@ export const usePlayerStore = defineStore('player', () => {
     recalcStats()
   }
 
-  // 删除存档（同时删除 IndexedDB 和 localStorage）
+  // 删除存档（同时删除后端 SQLite 和 localStorage）
   async function deleteGame() {
     stopCultivation()
     if (player.value) {
       try {
         await deleteFromDB(player.value.name)
       } catch (e) {
-        console.warn('IndexedDB 删除失败:', e)
+        console.warn('后端删除失败:', e)
       }
     }
     localStorage.removeItem(STORAGE_KEY)
@@ -1113,6 +1128,7 @@ export const usePlayerStore = defineStore('player', () => {
     totalLevel,
     realmProgress,
     realmProgressMax,
+    hasAccount,
     hasCharacter,
     activeSetInfo,
     setBonuses,
@@ -1121,6 +1137,7 @@ export const usePlayerStore = defineStore('player', () => {
     activeFormationConfig,
     formationBonus,
     createPlayer,
+    bindToAccount,
     startCultivation,
     stopCultivation,
     checkAndAdvanceRealmProgress,

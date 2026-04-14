@@ -1,16 +1,8 @@
 /**
- * IndexedDB 存档管理器
- * 简化版：单用户本地存档，不支持多账号
+ * 存档管理器 - HTTP API 客户端（对接后端 SQLite）
  */
 
-const DB_NAME = 'XianTuSaveDB'
-const DB_VERSION = 2  // 版本升级
-
-// 数据库表名（简化：只保留玩家存档）
-const STORE_PLAYERS = 'players'       // 游戏角色存档表
-
-// 存档版本号（用于数据迁移）
-const SAVE_VERSION = 1
+const API_BASE_URL = import.meta.env.DEV ? 'http://localhost:3001/api' : '/api'
 
 export interface SaveMetadata {
   version: number
@@ -24,52 +16,26 @@ export interface PlayerSaveRecord {
   metadata: SaveMetadata  // 存档元信息
 }
 
-// ==================== 数据库操作 ====================
+// ==================== HTTP API 客户端 ====================
 
-let dbInstance: IDBDatabase | null = null
-
-export function openDB(): Promise<IDBDatabase> {
-  if (dbInstance) return Promise.resolve(dbInstance)
-
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, DB_VERSION)
-
-    request.onerror = () => {
-      reject(new Error('IndexedDB 打开失败'))
-    }
-
-    request.onsuccess = () => {
-      dbInstance = request.result
-      resolve(dbInstance)
-    }
-
-    request.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result
-
-      // 角色存档表（简化：直接用 characterName 作为主键）
-      if (!db.objectStoreNames.contains(STORE_PLAYERS)) {
-        const playerStore = db.createObjectStore(STORE_PLAYERS, { keyPath: 'characterName' })
-        playerStore.createIndex('savedAt', 'metadata.savedAt', { unique: false })
-      }
-    }
-  })
-}
-
-// 通用事务执行
-async function withTransaction<T>(
-  storeName: string,
-  mode: IDBTransactionMode,
-  operation: (store: IDBObjectStore) => IDBRequest<T>
+async function apiClient<T>(
+  endpoint: string,
+  options: RequestInit = {}
 ): Promise<T> {
-  const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(storeName, mode)
-    const store = transaction.objectStore(storeName)
-    const request = operation(store)
-
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error)
+  const url = `${API_BASE_URL}${endpoint}`
+  const response = await fetch(url, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers
+    },
+    ...options
   })
+
+  if (!response.ok) {
+    throw new Error(`API 请求失败: ${response.statusText}`)
+  }
+
+  return response.json()
 }
 
 // ==================== 存档操作 ====================
@@ -79,17 +45,9 @@ export async function savePlayerData(
   characterName: string,
   playerData: object
 ): Promise<void> {
-  const record: PlayerSaveRecord = {
-    characterName,
-    playerData: JSON.stringify(playerData),
-    metadata: {
-      version: SAVE_VERSION,
-      savedAt: Date.now()
-    }
-  }
-
-  await withTransaction(STORE_PLAYERS, 'readwrite', (store) => {
-    return store.put(record)
+  await apiClient(`/saves/${encodeURIComponent(characterName)}`, {
+    method: 'POST',
+    body: JSON.stringify(playerData)
   })
 }
 
@@ -97,15 +55,16 @@ export async function savePlayerData(
 export async function loadPlayerData(
   characterName: string
 ): Promise<object | null> {
-  const record = await withTransaction<PlayerSaveRecord | undefined>(
-    STORE_PLAYERS,
-    'readonly',
-    (store) => store.get(characterName)
-  )
-
-  if (!record) return null
-
-  return JSON.parse(record.playerData)
+  try {
+    const data = await apiClient<object>(`/saves/${encodeURIComponent(characterName)}`)
+    return data
+  } catch (error) {
+    // 404 表示存档不存在
+    if (error instanceof Error && error.message.includes('404')) {
+      return null
+    }
+    throw error
+  }
 }
 
 /** 获取所有存档列表 */
@@ -113,29 +72,19 @@ export async function listPlayerSaves(): Promise<Array<{
   characterName: string
   metadata: SaveMetadata
 }>> {
-  const db = await openDB()
-  return new Promise((resolve, reject) => {
-    const transaction = db.transaction(STORE_PLAYERS, 'readonly')
-    const store = transaction.objectStore(STORE_PLAYERS)
-    const request = store.getAll()
-
-    request.onsuccess = () => {
-      const records = request.result as PlayerSaveRecord[]
-      resolve(records.map(r => ({
-        characterName: r.characterName,
-        metadata: r.metadata
-      })))
-    }
-    request.onerror = () => reject(request.error)
-  })
+  const data = await apiClient<Array<{
+    characterName: string
+    metadata: SaveMetadata
+  }>>('/saves')
+  return data
 }
 
 /** 删除角色存档 */
 export async function deletePlayerData(
   characterName: string
 ): Promise<void> {
-  await withTransaction(STORE_PLAYERS, 'readwrite', (store) => {
-    return store.delete(characterName)
+  await apiClient(`/saves/${encodeURIComponent(characterName)}`, {
+    method: 'DELETE'
   })
 }
 
@@ -143,12 +92,16 @@ export async function deletePlayerData(
 export async function exportPlayerData(
   characterName: string
 ): Promise<string | null> {
-  const record = await withTransaction<PlayerSaveRecord | undefined>(
-    STORE_PLAYERS,
-    'readonly',
-    (store) => store.get(characterName)
-  )
-  return record ? record.playerData : null
+  try {
+    const data = await apiClient<object>(`/saves/${encodeURIComponent(characterName)}/export`)
+    return JSON.stringify(data, null, 2)
+  } catch (error) {
+    // 存档不存在
+    if (error instanceof Error && error.message.includes('404')) {
+      return null
+    }
+    throw error
+  }
 }
 
 /** 从 JSON 字符串导入角色存档（用于恢复） */
@@ -163,91 +116,96 @@ export async function importPlayerData(
     throw new Error('存档数据格式无效')
   }
 
-  const record: PlayerSaveRecord = {
-    characterName,
-    playerData: playerDataJson,
-    metadata: {
-      version: SAVE_VERSION,
-      savedAt: Date.now()
-    }
-  }
-
-  await withTransaction(STORE_PLAYERS, 'readwrite', (store) => {
-    return store.put(record)
+  const playerData = JSON.parse(playerDataJson)
+  await apiClient(`/saves/${encodeURIComponent(characterName)}/import`, {
+    method: 'POST',
+    body: JSON.stringify(playerData)
   })
 }
 
 /** 导出所有存档数据（完整备份） */
 export async function exportAllSaves(): Promise<string> {
-  const db = await openDB()
-
-  const players = await withTransaction<PlayerSaveRecord[]>(
-    STORE_PLAYERS,
-    'readonly',
-    (store) => store.getAll()
-  )
-
+  // 获取所有存档列表
+  const saves = await listPlayerSaves()
+  
+  const players: PlayerSaveRecord[] = []
+  
+  // 逐一下载每个存档
+  for (const save of saves) {
+    const data = await loadPlayerData(save.characterName)
+    if (data) {
+      players.push({
+        characterName: save.characterName,
+        playerData: JSON.stringify(data),
+        metadata: save.metadata
+      })
+    }
+  }
+  
   const backup = {
-    version: SAVE_VERSION,
+    version: 1,
     exportedAt: Date.now(),
     players
   }
-
+  
   return JSON.stringify(backup, null, 2)
 }
 
 /** 从完整备份恢复所有存档 */
 export async function importAllSaves(backupJson: string): Promise<void> {
   const backup = JSON.parse(backupJson)
-
+  
   if (!backup.players) {
     throw new Error('备份文件格式无效')
   }
-
+  
   // 导入角色存档
   for (const player of backup.players) {
-    await withTransaction(STORE_PLAYERS, 'readwrite', (store) => {
-      return store.put(player)
-    })
+    await importPlayerData(player.characterName, player.playerData)
   }
 }
 
 // ==================== 迁移：旧格式 → 新格式 ====================
 
 /**
- * 从旧版 IndexedDB 格式迁移（userId + characterName 复合键）
+ * 从 localStorage 迁移到后端 SQLite（兼容性处理）
  */
 export async function migrateFromOldFormat(): Promise<boolean> {
-  const db = await openDB()
-
-  // 检查是否需要迁移（检查是否存在旧版 users 表）
-  // 注意：新版本只保留 players 表，所以这个函数保留但简化处理
-
   // 尝试从 localStorage 迁移旧存档
   const playerJson = localStorage.getItem('xiantu_player')
   if (playerJson) {
     try {
       const playerData = JSON.parse(playerJson) as any
       const characterName = playerData.name || 'unknown'
-
+      
+      // 检查是否已存在于后端
       const existing = await loadPlayerData(characterName)
       if (!existing) {
         await savePlayerData(characterName, playerData)
-        console.log('从 localStorage 迁移存档成功')
+        console.log('从 localStorage 迁移存档到后端 SQLite 成功')
+        // 迁移成功后，可以删除 localStorage 的旧数据
+        localStorage.removeItem('xiantu_player')
         return true
       }
     } catch (e) {
       console.error('迁移玩家存档失败:', e)
+      // 如果迁移失败，保留 localStorage 数据
     }
   }
-
+  
   return false
 }
 
-/** 初始化数据库 */
+/** 初始化存档管理器 */
 export async function initSaveManager(): Promise<void> {
-  await openDB()
-
+  console.log('使用后端 SQLite 存档系统')
+  
   // 自动迁移旧数据
-  await migrateFromOldFormat()
+  await migrateFromOldFormat().then(success => {
+    if (success) {
+      console.log('旧存档迁移完成')
+    }
+  }).catch(err => {
+    console.warn('存档迁移过程中出现错误:', err)
+  })
 }

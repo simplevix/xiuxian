@@ -1,17 +1,21 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
-import { ElMessage } from 'element-plus'
-
-const emit = defineEmits<{
-  start: []
-}>()
+import { useAuthStore } from '@/stores/auth'
+import { ElMessage, ElMessageBox } from 'element-plus'
 
 const playerStore = usePlayerStore()
+const authStore = useAuthStore()
+const router = useRouter()
 const playerName = ref('')
 
+// 是否有账号登录
+const isLoggedIn = computed(() => authStore.isLoggedIn)
+const currentUsername = computed(() => authStore.currentUser?.username)
+
 // 是否有角色
-const hasCharacter = playerStore.hasCharacter
+const hasCharacter = computed(() => playerStore.hasCharacter)
 
 // 创建角色
 function createPlayer() {
@@ -22,15 +26,38 @@ function createPlayer() {
   
   playerStore.createPlayer(playerName.value.trim())
   ElMessage.success('修仙之路开启！')
-  emit('start')
+  router.push('/game')
 }
 
 // 继续游戏
 async function continueGame() {
   const loaded = await playerStore.loadGame()
   if (loaded) {
-    emit('start')
+    router.push('/game')
   }
+}
+
+// 跳转到登录
+function goToLogin() {
+  router.push('/login')
+}
+
+// 跳转到注册
+function goToRegister() {
+  router.push('/register')
+}
+
+// 登出
+function logout() {
+  ElMessageBox.confirm('确定要退出登录吗？', '提示', {
+    confirmButtonText: '确定',
+    cancelButtonText: '取消',
+    type: 'warning'
+  }).then(() => {
+    authStore.logout()
+    playerStore.deleteGame()
+    ElMessage.success('已退出登录')
+  }).catch(() => {})
 }
 </script>
 
@@ -43,23 +70,26 @@ async function continueGame() {
         <p class="subtitle">修仙挂机 · 问道长生</p>
       </div>
 
-      <!-- 已有角色 - 直接进入游戏 -->
-      <template v-if="hasCharacter">
+      <!-- 已登录且有角色 -->
+      <template v-if="isLoggedIn && hasCharacter">
         <div class="continue-section game-card">
-          <p class="welcome-text">欢迎回来，{{ playerStore.player?.name }}</p>
+          <p class="welcome-text">欢迎回来，{{ currentUsername }}</p>
+          <p class="character-info">角色：{{ playerStore.player?.name }}</p>
           <el-button size="large" class="continue-btn" @click="continueGame">
             <el-icon><RefreshRight /></el-icon>
             继续修仙
           </el-button>
-          <p class="continue-hint">上次修炼：{{ playerStore.currentRealm?.name }}</p>
+          <el-button size="large" class="logout-btn" @click="logout">
+            退出登录
+          </el-button>
         </div>
       </template>
 
-      <!-- 未登录且无角色 - 创建角色 -->
-      <template v-else>
-        <!-- 创建角色 -->
+      <!-- 已登录但无角色 - 创建角色 -->
+      <template v-else-if="isLoggedIn">
         <div class="create-section game-card">
-          <h2 class="section-title">踏入仙途</h2>
+          <p class="welcome-text">欢迎，{{ currentUsername }}</p>
+          <h2 class="section-title">创建你的道号</h2>
           <el-input
             v-model="playerName"
             placeholder="请输入你的道号"
@@ -71,7 +101,55 @@ async function continueGame() {
             <el-icon><Pointer /></el-icon>
             开始修仙
           </el-button>
+          <el-button class="logout-link" @click="logout">
+            切换账号
+          </el-button>
         </div>
+      </template>
+
+      <!-- 未登录 -->
+      <template v-else>
+        <!-- 未登录有角色（游客模式） -->
+        <template v-if="hasCharacter">
+          <div class="guest-section game-card">
+            <p class="welcome-text">欢迎回来，修仙者</p>
+            <p class="guest-hint">当前为游客模式，建议登录以保存数据</p>
+            <el-button size="large" class="continue-btn" @click="continueGame">
+              <el-icon><RefreshRight /></el-icon>
+              继续修仙
+            </el-button>
+            <div class="auth-buttons">
+              <el-button @click="goToLogin">登录</el-button>
+              <el-button type="primary" @click="goToRegister">注册</el-button>
+            </div>
+          </div>
+        </template>
+
+        <!-- 未登录无角色 -->
+        <template v-else>
+          <div class="auth-section game-card">
+            <h2 class="section-title">踏入仙途</h2>
+            <p class="auth-hint">登录后可同步游戏数据，不登录也可直接开始</p>
+            <el-input
+              v-model="playerName"
+              placeholder="请输入你的道号"
+              size="large"
+              class="name-input"
+              @keyup.enter="createPlayer"
+            />
+            <el-button type="primary" size="large" class="create-btn" @click="createPlayer">
+              <el-icon><Pointer /></el-icon>
+              游客开始
+            </el-button>
+            <div class="auth-divider">
+              <span>或</span>
+            </div>
+            <div class="auth-buttons">
+              <el-button size="large" @click="goToLogin">登录</el-button>
+              <el-button size="large" type="primary" @click="goToRegister">注册</el-button>
+            </div>
+          </div>
+        </template>
       </template>
 
       <!-- 特色介绍 -->
@@ -151,6 +229,11 @@ async function continueGame() {
 .welcome-text {
   font-size: 1.3rem;
   color: var(--accent-gold);
+  margin-bottom: 8px;
+}
+
+.character-info {
+  color: var(--text-secondary);
   margin-bottom: 16px;
 }
 
@@ -161,6 +244,7 @@ async function continueGame() {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border: none;
   color: white;
+  margin-bottom: 12px;
 }
 
 .continue-btn:hover {
@@ -168,10 +252,8 @@ async function continueGame() {
   box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
 }
 
-.continue-hint {
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-  margin-top: 12px;
+.logout-btn {
+  width: 100%;
 }
 
 /* 创建角色 */
@@ -208,11 +290,70 @@ async function continueGame() {
   font-size: 1.1rem;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border: none;
+  margin-bottom: 12px;
 }
 
 .create-btn:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+}
+
+.logout-link {
+  color: var(--text-secondary);
+}
+
+/* 游客模式 */
+.guest-section {
+  text-align: center;
+  margin-bottom: 24px;
+  padding: 24px;
+}
+
+.guest-hint {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin-bottom: 16px;
+}
+
+/* 认证区域 */
+.auth-section {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.auth-hint {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin-bottom: 20px;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  margin: 20px 0;
+  color: var(--text-secondary);
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-color);
+}
+
+.auth-divider span {
+  padding: 0 16px;
+}
+
+.auth-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.auth-buttons .el-button {
+  flex: 1;
+  height: 44px;
 }
 
 /* 特色介绍 */
