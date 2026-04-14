@@ -1,14 +1,19 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
-import HomeView from '@/views/HomeView.vue'
-import GameView from '@/views/GameView.vue'
-
-type ViewMode = 'home' | 'game'
+import { useAuthStore } from '@/stores/auth'
 
 const playerStore = usePlayerStore()
-const viewMode = ref<ViewMode>('home')
+const authStore = useAuthStore()
+const router = useRouter()
 
+// 是否已登录
+const isLoggedIn = computed(() => authStore.isLoggedIn)
+const isGM = computed(() => authStore.isGM)
+const currentUsername = computed(() => authStore.currentUser?.username)
+
+// 初始化
 onMounted(async () => {
   // 初始化存档管理器
   const { initSaveManager } = await import('@/utils/saveManager')
@@ -17,12 +22,16 @@ onMounted(async () => {
   // 检查是否有存档，自动进入游戏
   const loaded = await playerStore.loadGame()
   if (loaded) {
-    viewMode.value = 'game'
+    // 有存档，跳转到游戏页面
+    router.replace('/game')
   }
 })
 
-function onGameStart() {
-  viewMode.value = 'game'
+// 登出
+function logout() {
+  authStore.logout()
+  playerStore.deleteGame()
+  router.push('/')
 }
 </script>
 
@@ -31,20 +40,37 @@ function onGameStart() {
     <!-- 顶部导航栏 -->
     <header class="top-nav">
       <div class="nav-left">
-        <h1 class="game-title-small">仙途问路</h1>
+        <router-link to="/" class="game-title-small">仙途问路</router-link>
+      </div>
+      <div class="nav-right">
+        <template v-if="isLoggedIn">
+          <span class="user-info">
+            <el-icon><User /></el-icon>
+            {{ currentUsername }}
+            <span v-if="isGM" class="gm-tag">GM</span>
+          </span>
+          <router-link v-if="isGM" to="/gm">
+            <el-button type="warning" size="small" plain>GM后台</el-button>
+          </router-link>
+          <el-button link @click="logout">
+            <el-icon><SwitchButton /></el-icon>
+            退出
+          </el-button>
+        </template>
+        <template v-else>
+          <router-link to="/login">
+            <el-button link>登录</el-button>
+          </router-link>
+          <router-link to="/register">
+            <el-button type="primary" size="small">注册</el-button>
+          </router-link>
+        </template>
       </div>
     </header>
 
     <!-- 主内容区域 -->
     <main class="main-content">
-      <!-- 首页 -->
-      <HomeView
-        v-if="viewMode === 'home'"
-        @start="onGameStart"
-      />
-
-      <!-- 游戏界面 -->
-      <GameView v-else-if="viewMode === 'game'" />
+      <router-view />
     </main>
   </div>
 </template>
@@ -77,18 +103,46 @@ function onGameStart() {
   align-items: center;
 }
 
+.nav-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
 .game-title-small {
   font-size: 1.3rem;
+  font-weight: bold;
   background: linear-gradient(135deg, #ffd700 0%, #ff9800 50%, #f093fb 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  margin: 0;
+  text-decoration: none;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.gm-tag {
+  padding: 2px 8px;
+  background: linear-gradient(135deg, #f5576c 0%, #f093fb 100%);
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: bold;
+  color: white;
 }
 
 /* 主内容区域 */
 .main-content {
   flex: 1;
   padding-top: 60px;
+}
+
+a {
+  text-decoration: none;
 }
 </style>

@@ -6,6 +6,11 @@ export const generateId = () => Math.random().toString(36).substring(2, 15) + Da
 // 套装装备生成概率（相对于普通装备）
 const SET_EQUIPMENT_CHANCE = 0.08 // 8% 概率生成套装装备
 
+// 品质属性倍率
+const QUALITY_MULTIPLIERS: Record<string, number> = {
+  common: 1, good: 1.5, rare: 2, epic: 3, legendary: 5, divine: 8, primordial: 12
+}
+
 export function generateEquipment(type: EquipmentType, quality?: QualityId, playerLevel?: number): Equipment {
   // 品质概率分布
   if (!quality) {
@@ -29,8 +34,7 @@ export function generateEquipment(type: EquipmentType, quality?: QualityId, play
 
 // 生成普通装备
 function generateNormalEquipment(type: EquipmentType, quality: QualityId): Equipment {
-  const multipliers = { common: 1, good: 1.5, rare: 2, epic: 3, legendary: 5 }
-  const m = multipliers[quality]
+  const m = QUALITY_MULTIPLIERS[quality] || 1
 
   // 装备基础属性（随品质缩放）
   const baseAttackMap: Record<string, number> = { weapon: 20, ring: 8, necklace: 10 }
@@ -87,8 +91,7 @@ function generateSetEquipment(type: EquipmentType, quality: QualityId, playerLev
   }
   
   // 套装装备属性基于套装配置的属性
-  const multipliers = { common: 1, good: 1.5, rare: 2, epic: 3, legendary: 5 }
-  const m = multipliers[quality]
+  const m = QUALITY_MULTIPLIERS[quality] || 1
   const levelBonus = 1 + (realmIndex * 0.2) // 境界越高，属性加成越高
   
   const rand = () => 0.85 + Math.random() * 0.3 // 套装装备波动更小
@@ -107,12 +110,14 @@ function generateSetEquipment(type: EquipmentType, quality: QualityId, playerLev
 }
 
 function generateEquipName(type: EquipmentType, quality: QualityId): string {
-  const prefixes: Record<QualityId, string[]> = {
+  const prefixes: Record<string, string[]> = {
     common: ['铁', '木', '铜', '石', '皮'],
     good: ['精钢', '玄木', '白银', '玉石', '兽皮'],
     rare: ['灵', '玄', '紫', '碧', '青'],
     epic: ['天罡', '地煞', '日月', '星河', '云霄'],
-    legendary: ['太初', '混沌', '鸿蒙', '九天', '乾坤']
+    legendary: ['太初', '混沌', '鸿蒙', '九天', '乾坤'],
+    divine: ['天道', '神罚', '轮回', '命运', '虚空'],
+    primordial: ['元始', '永恒', '创世', '万古', '太虚']
   }
 
   const names: Record<string, string[]> = {
@@ -125,7 +130,7 @@ function generateEquipName(type: EquipmentType, quality: QualityId): string {
     ring: ['戒', '环', '镯', '铃', '符']
   }
 
-  const pre = prefixes[quality][Math.floor(Math.random() * prefixes[quality].length)]
+  const pre = (prefixes[quality] || prefixes.common)[Math.floor(Math.random() * (prefixes[quality] || prefixes.common).length)]
   const suf = (names[type] || names.ring)[Math.floor(Math.random() * (names[type] || names.ring).length)]
   return `${pre}${suf}`
 }
