@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 // 懒加载组件
 const HomeView = () => import('@/views/HomeView.vue')
@@ -11,6 +12,7 @@ const InventoryView = () => import('@/views/InventoryView.vue')
 const PetView = () => import('@/views/PetView.vue')
 const FormationView = () => import('@/views/FormationView.vue')
 const ShopView = () => import('@/views/ShopView.vue')
+const GMView = () => import('@/views/GMView.vue')
 
 const routes = [
   {
@@ -78,6 +80,12 @@ const routes = [
         meta: { title: '商店 - 仙途问路' }
       }
     ]
+  },
+  {
+    path: '/gm',
+    name: 'GM',
+    component: GMView,
+    meta: { title: 'GM管理后台 - 仙途问路', requiresGM: true }
   }
 ]
 
@@ -86,11 +94,21 @@ const router = createRouter({
   routes
 })
 
-// 路由守卫：检查是否有角色，如果没有则跳回首页
+// 路由守卫
 router.beforeEach((to, from, next) => {
   // 设置页面标题
   if (to.meta.title) {
     document.title = String(to.meta.title)
+  }
+
+  const authStore = useAuthStore()
+
+  // 检查是否需要GM权限
+  if (to.meta.requiresGM) {
+    if (!authStore.isGM) {
+      next('/')
+      return
+    }
   }
 
   // 检查是否需要角色数据

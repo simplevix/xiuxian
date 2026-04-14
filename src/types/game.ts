@@ -20,7 +20,9 @@ export const QUALITIES = {
   good: { name: '优秀', color: '#4caf50', multiplier: 1.5 },
   rare: { name: '稀有', color: '#2196f3', multiplier: 2 },
   epic: { name: '史诗', color: '#9c27b0', multiplier: 3 },
-  legendary: { name: '仙器', color: '#ff9800', multiplier: 5 }
+  legendary: { name: '仙器', color: '#ff9800', multiplier: 5 },
+  divine: { name: '神话', color: '#e91e63', multiplier: 8 },
+  primordial: { name: '太古', color: '#ffd700', multiplier: 12 }
 } as const
 
 export type QualityId = keyof typeof QUALITIES
@@ -1301,7 +1303,19 @@ export interface AutoSellSetting {
 }
 
 // 装备品质类型
-export type EquipmentQuality = 'common' | 'good' | 'rare' | 'epic' | 'legendary'
+// common→good→rare→epic→legendary→divine→primordial
+export type EquipmentQuality = 'common' | 'good' | 'rare' | 'epic' | 'legendary' | 'divine' | 'primordial'
+
+// 装备品质配置
+export const EQUIPMENT_QUALITY_CONFIG = {
+  common: { name: '普通', color: '#9e9e9e', multiplier: 1.0 },
+  good: { name: '优秀', color: '#4caf50', multiplier: 1.5 },
+  rare: { name: '稀有', color: '#2196f3', multiplier: 2.0 },
+  epic: { name: '史诗', color: '#9c27b0', multiplier: 3.0 },
+  legendary: { name: '仙器', color: '#ff9800', multiplier: 5.0 },
+  divine: { name: '神话', color: '#e91e63', multiplier: 8.0 },
+  primordial: { name: '太古', color: '#ffd700', multiplier: 12.0 }
+}
 
 // 怪物
 export interface Monster {
@@ -1482,18 +1496,19 @@ export const SCENES: Scene[] = [
     canRest: false,
     artifacts: ['world_ring', 'seven_kills_sword', 'thousand_soul_flag', 'yuan_chen_flag', 'celestial_master_seal', 'nine_heavens_furnace', 'world_extinguishing_palm', 'celestial_dragon_orb'],
     monsters: [
-      // 小怪等级51-59级
+      // 小怪等级51-59级：legendary为主，57级开始出现divine
       { id: 'ruin_guardian', name: '遗迹守卫', level: 51, hp: 3500, maxHp: 3500, attack: 300, defense: 150, expReward: 1750, stoneReward: 875, boss: false, dropTable: [{ chance: 0.35, quality: 'legendary', type: 'armor' }, { chance: 0.08, type: 'artifact', itemId: 'world_ring', chance: 0.07 }] },
       { id: 'ancient_spirit', name: '古灵', level: 52, hp: 2200, maxHp: 2200, attack: 350, defense: 80, expReward: 1830, stoneReward: 915, boss: false, dropTable: [{ chance: 0.37, quality: 'legendary', type: 'necklace' }, { chance: 0.08, type: 'artifact', itemId: 'seven_kills_sword', chance: 0.07 }] },
       { id: 'stone_sage', name: '石贤者', level: 53, hp: 4200, maxHp: 4200, attack: 280, defense: 180, expReward: 1910, stoneReward: 955, boss: false, dropTable: [{ chance: 0.39, quality: 'legendary', type: 'helmet' }, { chance: 0.08, type: 'artifact', itemId: 'thousand_soul_flag', chance: 0.07 }] },
       { id: 'rune_beast', name: '符文兽', level: 54, hp: 3000, maxHp: 3000, attack: 340, defense: 110, expReward: 2000, stoneReward: 1000, boss: false, dropTable: [{ chance: 0.41, quality: 'legendary', type: 'weapon' }, { chance: 0.08, type: 'artifact', itemId: 'yuan_chen_flag', chance: 0.07 }] },
       { id: 'time_wraith', name: '时光幽灵', level: 55, hp: 2500, maxHp: 2500, attack: 380, defense: 90, expReward: 2090, stoneReward: 1045, boss: false, dropTable: [{ chance: 0.43, quality: 'legendary', type: 'ring' }, { chance: 0.08, type: 'artifact', itemId: 'celestial_master_seal', chance: 0.07 }] },
       { id: 'immortal_slime', name: '仙灵史莱姆', level: 56, hp: 5500, maxHp: 5500, attack: 260, defense: 220, expReward: 2180, stoneReward: 1090, boss: false, dropTable: [{ chance: 0.45, quality: 'legendary', type: 'pants' }, { chance: 0.08, type: 'artifact', itemId: 'nine_heavens_furnace', chance: 0.07 }] },
-      { id: 'sword_spirit', name: '剑灵', level: 57, hp: 3200, maxHp: 3200, attack: 400, defense: 100, expReward: 2270, stoneReward: 1135, boss: false, dropTable: [{ chance: 0.47, quality: 'legendary', type: 'weapon' }, { chance: 0.08, type: 'artifact', itemId: 'world_extinguishing_palm', chance: 0.07 }] },
-      { id: 'seal_guardian', name: '封印守护者', level: 58, hp: 4800, maxHp: 4800, attack: 330, defense: 190, expReward: 2360, stoneReward: 1180, boss: false, dropTable: [{ chance: 0.49, quality: 'legendary', type: 'armor' }, { chance: 0.08, type: 'artifact', itemId: 'celestial_dragon_orb', chance: 0.07 }] },
-      { id: 'forgotten_god', name: '遗忘之神', level: 59, hp: 6000, maxHp: 6000, attack: 360, defense: 200, expReward: 2460, stoneReward: 1230, boss: false, dropTable: [{ chance: 0.51, quality: 'legendary', type: 'boots' }, { chance: 0.08, type: 'artifact', itemId: 'world_ring', chance: 0.08 }] },
-      // BOSS固定60级
-      { id: 'ruins_boss', name: '上古仙傀', level: 60, hp: 12000, maxHp: 12000, attack: 500, defense: 280, expReward: 4500, stoneReward: 2250, boss: true, dropTable: [{ chance: 0.85, quality: 'legendary', type: 'weapon' }, { chance: 0.65, quality: 'legendary', type: 'armor' }, { chance: 0.3, type: 'pet', itemName: '灵宠·古灵', itemId: 'pet_ancient_spirit' }, { chance: 0.45, type: 'artifact', itemId: 'celestial_master_seal', chance: 0.2 }] }
+      // 57级开始出现divine
+      { id: 'sword_spirit', name: '剑灵', level: 57, hp: 3200, maxHp: 3200, attack: 400, defense: 100, expReward: 2270, stoneReward: 1135, boss: false, dropTable: [{ chance: 0.47, quality: 'divine', type: 'weapon' }, { chance: 0.08, type: 'artifact', itemId: 'world_extinguishing_palm', chance: 0.07 }] },
+      { id: 'seal_guardian', name: '封印守护者', level: 58, hp: 4800, maxHp: 4800, attack: 330, defense: 190, expReward: 2360, stoneReward: 1180, boss: false, dropTable: [{ chance: 0.49, quality: 'divine', type: 'armor' }, { chance: 0.08, type: 'artifact', itemId: 'celestial_dragon_orb', chance: 0.07 }] },
+      { id: 'forgotten_god', name: '遗忘之神', level: 59, hp: 6000, maxHp: 6000, attack: 360, defense: 200, expReward: 2460, stoneReward: 1230, boss: false, dropTable: [{ chance: 0.51, quality: 'divine', type: 'boots' }, { chance: 0.08, type: 'artifact', itemId: 'world_ring', chance: 0.08 }] },
+      // BOSS固定60级：divine为主
+      { id: 'ruins_boss', name: '上古仙傀', level: 60, hp: 12000, maxHp: 12000, attack: 500, defense: 280, expReward: 4500, stoneReward: 2250, boss: true, dropTable: [{ chance: 0.85, quality: 'divine', type: 'weapon' }, { chance: 0.65, quality: 'divine', type: 'armor' }, { chance: 0.3, type: 'pet', itemName: '灵宠·古灵', itemId: 'pet_ancient_spirit' }, { chance: 0.45, type: 'artifact', itemId: 'celestial_master_seal', chance: 0.2 }] }
     ]
   },
   // ==================== 第7图：61-70级（合体期）====================
@@ -1506,18 +1521,18 @@ export const SCENES: Scene[] = [
     canRest: false,
     artifacts: ['god_slaying_spear', 'world_destroying_furnace', 'immortal_peach_branch', 'celestial_fold'],
     monsters: [
-      // 小怪等级61-69级
-      { id: 'demon_soldier', name: '魔兵', level: 61, hp: 4500, maxHp: 4500, attack: 380, defense: 170, expReward: 2560, stoneReward: 1280, boss: false, dropTable: [{ chance: 0.4, quality: 'legendary', type: 'weapon' }, { chance: 0.08, type: 'artifact', itemId: 'god_slaying_spear', chance: 0.08 }] },
-      { id: 'blood_fiend', name: '血魔', level: 62, hp: 3500, maxHp: 3500, attack: 430, defense: 110, expReward: 2660, stoneReward: 1330, boss: false, dropTable: [{ chance: 0.42, quality: 'legendary', type: 'necklace' }, { chance: 0.08, type: 'artifact', itemId: 'world_destroying_furnace', chance: 0.08 }] },
-      { id: 'shadow_demon', name: '影魔', level: 63, hp: 3000, maxHp: 3000, attack: 460, defense: 90, expReward: 2760, stoneReward: 1380, boss: false, dropTable: [{ chance: 0.44, quality: 'legendary', type: 'boots' }, { chance: 0.08, type: 'artifact', itemId: 'immortal_peach_branch', chance: 0.08 }] },
-      { id: 'corruption_beast', name: '腐化兽', level: 64, hp: 6000, maxHp: 6000, attack: 350, defense: 230, expReward: 2860, stoneReward: 1430, boss: false, dropTable: [{ chance: 0.46, quality: 'legendary', type: 'armor' }, { chance: 0.08, type: 'artifact', itemId: 'celestial_fold', chance: 0.08 }] },
-      { id: 'demon_mage', name: '魔导师', level: 65, hp: 3800, maxHp: 3800, attack: 480, defense: 130, expReward: 2970, stoneReward: 1485, boss: false, dropTable: [{ chance: 0.48, quality: 'legendary', type: 'ring' }, { chance: 0.08, type: 'artifact', itemId: 'god_slaying_spear', chance: 0.08 }] },
-      { id: 'chaos_warrior', name: '混沌战士', level: 66, hp: 5500, maxHp: 5500, attack: 420, defense: 200, expReward: 3080, stoneReward: 1540, boss: false, dropTable: [{ chance: 0.5, quality: 'legendary', type: 'helmet' }, { chance: 0.08, type: 'artifact', itemId: 'world_destroying_furnace', chance: 0.08 }] },
-      { id: 'abyss_demon', name: '深渊恶魔', level: 67, hp: 7000, maxHp: 7000, attack: 390, defense: 250, expReward: 3190, stoneReward: 1595, boss: false, dropTable: [{ chance: 0.52, quality: 'legendary', type: 'pants' }, { chance: 0.08, type: 'artifact', itemId: 'immortal_peach_branch', chance: 0.08 }] },
-      { id: 'soul_demon', name: '噬魂魔', level: 68, hp: 4200, maxHp: 4200, attack: 510, defense: 120, expReward: 3300, stoneReward: 1650, boss: false, dropTable: [{ chance: 0.54, quality: 'legendary', type: 'weapon' }, { chance: 0.08, type: 'artifact', itemId: 'celestial_fold', chance: 0.08 }] },
-      { id: 'demon_general', name: '魔将', level: 69, hp: 8000, maxHp: 8000, attack: 450, defense: 270, expReward: 3420, stoneReward: 1710, boss: false, dropTable: [{ chance: 0.56, quality: 'legendary', type: 'armor' }, { chance: 0.08, type: 'artifact', itemId: 'god_slaying_spear', chance: 0.09 }] },
+      // 小怪等级61-69级：divine为主
+      { id: 'demon_soldier', name: '魔兵', level: 61, hp: 4500, maxHp: 4500, attack: 380, defense: 170, expReward: 2560, stoneReward: 1280, boss: false, dropTable: [{ chance: 0.4, quality: 'divine', type: 'weapon' }, { chance: 0.08, type: 'artifact', itemId: 'god_slaying_spear', chance: 0.08 }] },
+      { id: 'blood_fiend', name: '血魔', level: 62, hp: 3500, maxHp: 3500, attack: 430, defense: 110, expReward: 2660, stoneReward: 1330, boss: false, dropTable: [{ chance: 0.42, quality: 'divine', type: 'necklace' }, { chance: 0.08, type: 'artifact', itemId: 'world_destroying_furnace', chance: 0.08 }] },
+      { id: 'shadow_demon', name: '影魔', level: 63, hp: 3000, maxHp: 3000, attack: 460, defense: 90, expReward: 2760, stoneReward: 1380, boss: false, dropTable: [{ chance: 0.44, quality: 'divine', type: 'boots' }, { chance: 0.08, type: 'artifact', itemId: 'immortal_peach_branch', chance: 0.08 }] },
+      { id: 'corruption_beast', name: '腐化兽', level: 64, hp: 6000, maxHp: 6000, attack: 350, defense: 230, expReward: 2860, stoneReward: 1430, boss: false, dropTable: [{ chance: 0.46, quality: 'divine', type: 'armor' }, { chance: 0.08, type: 'artifact', itemId: 'celestial_fold', chance: 0.08 }] },
+      { id: 'demon_mage', name: '魔导师', level: 65, hp: 3800, maxHp: 3800, attack: 480, defense: 130, expReward: 2970, stoneReward: 1485, boss: false, dropTable: [{ chance: 0.48, quality: 'divine', type: 'ring' }, { chance: 0.08, type: 'artifact', itemId: 'god_slaying_spear', chance: 0.08 }] },
+      { id: 'chaos_warrior', name: '混沌战士', level: 66, hp: 5500, maxHp: 5500, attack: 420, defense: 200, expReward: 3080, stoneReward: 1540, boss: false, dropTable: [{ chance: 0.5, quality: 'divine', type: 'helmet' }, { chance: 0.08, type: 'artifact', itemId: 'world_destroying_furnace', chance: 0.08 }] },
+      { id: 'abyss_demon', name: '深渊恶魔', level: 67, hp: 7000, maxHp: 7000, attack: 390, defense: 250, expReward: 3190, stoneReward: 1595, boss: false, dropTable: [{ chance: 0.52, quality: 'divine', type: 'pants' }, { chance: 0.08, type: 'artifact', itemId: 'immortal_peach_branch', chance: 0.08 }] },
+      { id: 'soul_demon', name: '噬魂魔', level: 68, hp: 4200, maxHp: 4200, attack: 510, defense: 120, expReward: 3300, stoneReward: 1650, boss: false, dropTable: [{ chance: 0.54, quality: 'divine', type: 'weapon' }, { chance: 0.08, type: 'artifact', itemId: 'celestial_fold', chance: 0.08 }] },
+      { id: 'demon_general', name: '魔将', level: 69, hp: 8000, maxHp: 8000, attack: 450, defense: 270, expReward: 3420, stoneReward: 1710, boss: false, dropTable: [{ chance: 0.56, quality: 'divine', type: 'armor' }, { chance: 0.08, type: 'artifact', itemId: 'god_slaying_spear', chance: 0.09 }] },
       // BOSS固定70级
-      { id: 'demon_boss', name: '魔王', level: 70, hp: 16000, maxHp: 16000, attack: 650, defense: 350, expReward: 6000, stoneReward: 3000, boss: true, dropTable: [{ chance: 0.9, quality: 'legendary', type: 'weapon' }, { chance: 0.7, quality: 'legendary', type: 'armor' }, { chance: 0.35, type: 'pet', itemName: '灵宠·魔灵', itemId: 'pet_demon' }, { chance: 0.5, type: 'artifact', itemId: 'world_destroying_furnace', chance: 0.22 }] }
+      { id: 'demon_boss', name: '魔王', level: 70, hp: 16000, maxHp: 16000, attack: 650, defense: 350, expReward: 6000, stoneReward: 3000, boss: true, dropTable: [{ chance: 0.9, quality: 'divine', type: 'weapon' }, { chance: 0.7, quality: 'divine', type: 'armor' }, { chance: 0.35, type: 'pet', itemName: '灵宠·魔灵', itemId: 'pet_demon' }, { chance: 0.5, type: 'artifact', itemId: 'world_destroying_furnace', chance: 0.22 }] }
     ]
   },
   // ==================== 第8图：71-80级（渡劫期）====================
@@ -1530,18 +1545,19 @@ export const SCENES: Scene[] = [
     canRest: false,
     artifacts: ['ten_thousand_buddha_cup', 'nine_yang_sword', 'world_origin_staff', 'three_pure_ones_flag'],
     monsters: [
-      // 小怪等级71-79级
-      { id: 'celestial_guard', name: '天兵', level: 71, hp: 6000, maxHp: 6000, attack: 480, defense: 220, expReward: 3540, stoneReward: 1770, boss: false, dropTable: [{ chance: 0.45, quality: 'legendary', type: 'weapon' }, { chance: 0.08, type: 'artifact', itemId: 'ten_thousand_buddha_cup', chance: 0.09 }] },
-      { id: 'thunder_spirit_king', name: '雷灵王', level: 72, hp: 4500, maxHp: 4500, attack: 550, defense: 130, expReward: 3660, stoneReward: 1830, boss: false, dropTable: [{ chance: 0.47, quality: 'legendary', type: 'necklace' }, { chance: 0.08, type: 'artifact', itemId: 'nine_yang_sword', chance: 0.09 }] },
-      { id: 'cloud_beast', name: '云兽', level: 73, hp: 8000, maxHp: 8000, attack: 420, defense: 280, expReward: 3780, stoneReward: 1890, boss: false, dropTable: [{ chance: 0.49, quality: 'legendary', type: 'armor' }, { chance: 0.08, type: 'artifact', itemId: 'world_origin_staff', chance: 0.09 }] },
-      { id: 'star_fairy', name: '星灵', level: 74, hp: 3800, maxHp: 3800, attack: 600, defense: 100, expReward: 3910, stoneReward: 1955, boss: false, dropTable: [{ chance: 0.51, quality: 'legendary', type: 'ring' }, { chance: 0.08, type: 'artifact', itemId: 'three_pure_ones_flag', chance: 0.09 }] },
-      { id: 'wind_god', name: '风神', level: 75, hp: 5500, maxHp: 5500, attack: 530, defense: 180, expReward: 4040, stoneReward: 2020, boss: false, dropTable: [{ chance: 0.53, quality: 'legendary', type: 'boots' }, { chance: 0.08, type: 'artifact', itemId: 'ten_thousand_buddha_cup', chance: 0.09 }] },
-      { id: 'light_beast', name: '光兽', level: 76, hp: 9500, maxHp: 9500, attack: 460, defense: 310, expReward: 4170, stoneReward: 2085, boss: false, dropTable: [{ chance: 0.55, quality: 'legendary', type: 'helmet' }, { chance: 0.08, type: 'artifact', itemId: 'nine_yang_sword', chance: 0.09 }] },
-      { id: 'thunder_general', name: '雷将', level: 77, hp: 7000, maxHp: 7000, attack: 580, defense: 240, expReward: 4310, stoneReward: 2155, boss: false, dropTable: [{ chance: 0.57, quality: 'legendary', type: 'weapon' }, { chance: 0.08, type: 'artifact', itemId: 'world_origin_staff', chance: 0.09 }] },
-      { id: 'moon_spirit', name: '月灵', level: 78, hp: 4800, maxHp: 4800, attack: 650, defense: 140, expReward: 4450, stoneReward: 2225, boss: false, dropTable: [{ chance: 0.59, quality: 'legendary', type: 'necklace' }, { chance: 0.08, type: 'artifact', itemId: 'three_pure_ones_flag', chance: 0.09 }] },
-      { id: 'sun_beast', name: '日兽', level: 79, hp: 11000, maxHp: 11000, attack: 520, defense: 340, expReward: 4590, stoneReward: 2295, boss: false, dropTable: [{ chance: 0.61, quality: 'legendary', type: 'armor' }, { chance: 0.08, type: 'artifact', itemId: 'ten_thousand_buddha_cup', chance: 0.1 }] },
+      // 小怪等级71-79级：divine为主，77级开始出现primordial
+      { id: 'celestial_guard', name: '天兵', level: 71, hp: 6000, maxHp: 6000, attack: 480, defense: 220, expReward: 3540, stoneReward: 1770, boss: false, dropTable: [{ chance: 0.45, quality: 'divine', type: 'weapon' }, { chance: 0.08, type: 'artifact', itemId: 'ten_thousand_buddha_cup', chance: 0.09 }] },
+      { id: 'thunder_spirit_king', name: '雷灵王', level: 72, hp: 4500, maxHp: 4500, attack: 550, defense: 130, expReward: 3660, stoneReward: 1830, boss: false, dropTable: [{ chance: 0.47, quality: 'divine', type: 'necklace' }, { chance: 0.08, type: 'artifact', itemId: 'nine_yang_sword', chance: 0.09 }] },
+      { id: 'cloud_beast', name: '云兽', level: 73, hp: 8000, maxHp: 8000, attack: 420, defense: 280, expReward: 3780, stoneReward: 1890, boss: false, dropTable: [{ chance: 0.49, quality: 'divine', type: 'armor' }, { chance: 0.08, type: 'artifact', itemId: 'world_origin_staff', chance: 0.09 }] },
+      { id: 'star_fairy', name: '星灵', level: 74, hp: 3800, maxHp: 3800, attack: 600, defense: 100, expReward: 3910, stoneReward: 1955, boss: false, dropTable: [{ chance: 0.51, quality: 'divine', type: 'ring' }, { chance: 0.08, type: 'artifact', itemId: 'three_pure_ones_flag', chance: 0.09 }] },
+      { id: 'wind_god', name: '风神', level: 75, hp: 5500, maxHp: 5500, attack: 530, defense: 180, expReward: 4040, stoneReward: 2020, boss: false, dropTable: [{ chance: 0.53, quality: 'divine', type: 'boots' }, { chance: 0.08, type: 'artifact', itemId: 'ten_thousand_buddha_cup', chance: 0.09 }] },
+      { id: 'light_beast', name: '光兽', level: 76, hp: 9500, maxHp: 9500, attack: 460, defense: 310, expReward: 4170, stoneReward: 2085, boss: false, dropTable: [{ chance: 0.55, quality: 'divine', type: 'helmet' }, { chance: 0.08, type: 'artifact', itemId: 'nine_yang_sword', chance: 0.09 }] },
+      // 77级开始出现primordial
+      { id: 'thunder_general', name: '雷将', level: 77, hp: 7000, maxHp: 7000, attack: 580, defense: 240, expReward: 4310, stoneReward: 2155, boss: false, dropTable: [{ chance: 0.57, quality: 'primordial', type: 'weapon' }, { chance: 0.08, type: 'artifact', itemId: 'world_origin_staff', chance: 0.09 }] },
+      { id: 'moon_spirit', name: '月灵', level: 78, hp: 4800, maxHp: 4800, attack: 650, defense: 140, expReward: 4450, stoneReward: 2225, boss: false, dropTable: [{ chance: 0.59, quality: 'primordial', type: 'necklace' }, { chance: 0.08, type: 'artifact', itemId: 'three_pure_ones_flag', chance: 0.09 }] },
+      { id: 'sun_beast', name: '日兽', level: 79, hp: 11000, maxHp: 11000, attack: 520, defense: 340, expReward: 4590, stoneReward: 2295, boss: false, dropTable: [{ chance: 0.61, quality: 'primordial', type: 'armor' }, { chance: 0.08, type: 'artifact', itemId: 'ten_thousand_buddha_cup', chance: 0.1 }] },
       // BOSS固定80级
-      { id: 'heaven_boss', name: '天劫使者', level: 80, hp: 22000, maxHp: 22000, attack: 800, defense: 450, expReward: 8000, stoneReward: 4000, boss: true, dropTable: [{ chance: 0.95, quality: 'legendary', type: 'weapon' }, { chance: 0.75, quality: 'legendary', type: 'armor' }, { chance: 0.4, type: 'pet', itemName: '灵宠·天灵', itemId: 'pet_celestial' }, { chance: 0.55, type: 'artifact', itemId: 'nine_yang_sword', chance: 0.25 }] }
+      { id: 'heaven_boss', name: '天劫使者', level: 80, hp: 22000, maxHp: 22000, attack: 800, defense: 450, expReward: 8000, stoneReward: 4000, boss: true, dropTable: [{ chance: 0.95, quality: 'primordial', type: 'weapon' }, { chance: 0.75, quality: 'primordial', type: 'armor' }, { chance: 0.4, type: 'pet', itemName: '灵宠·天灵', itemId: 'pet_celestial' }, { chance: 0.55, type: 'artifact', itemId: 'nine_yang_sword', chance: 0.25 }] }
     ]
   },
   // ==================== 第9图：81-90级（大乘期）====================
@@ -1554,18 +1570,18 @@ export const SCENES: Scene[] = [
     canRest: false,
     artifacts: ['world_core_ring', 'creation_flag', 'celestial_eye', 'primordial_cauldron'],
     monsters: [
-      // 小怪等级81-89级
-      { id: 'immortal_guard', name: '仙卫', level: 81, hp: 8000, maxHp: 8000, attack: 580, defense: 280, expReward: 4740, stoneReward: 2370, boss: false, dropTable: [{ chance: 0.5, quality: 'legendary', type: 'weapon' }, { chance: 0.08, type: 'artifact', itemId: 'world_core_ring', chance: 0.1 }] },
-      { id: 'jade_beast', name: '玉兽', level: 82, hp: 12000, maxHp: 12000, attack: 480, defense: 360, expReward: 4890, stoneReward: 2445, boss: false, dropTable: [{ chance: 0.52, quality: 'legendary', type: 'armor' }, { chance: 0.08, type: 'artifact', itemId: 'creation_flag', chance: 0.1 }] },
-      { id: 'phoenix_spirit', name: '凤凰灵', level: 83, hp: 6000, maxHp: 6000, attack: 700, defense: 160, expReward: 5040, stoneReward: 2520, boss: false, dropTable: [{ chance: 0.54, quality: 'legendary', type: 'necklace' }, { chance: 0.08, type: 'artifact', itemId: 'celestial_eye', chance: 0.1 }] },
-      { id: 'dragon_soul', name: '龙魂', level: 84, hp: 10000, maxHp: 10000, attack: 620, defense: 300, expReward: 5200, stoneReward: 2600, boss: false, dropTable: [{ chance: 0.56, quality: 'legendary', type: 'helmet' }, { chance: 0.08, type: 'artifact', itemId: 'primordial_cauldron', chance: 0.1 }] },
-      { id: 'golden_lion', name: '金狮', level: 85, hp: 14000, maxHp: 14000, attack: 550, defense: 380, expReward: 5360, stoneReward: 2680, boss: false, dropTable: [{ chance: 0.58, quality: 'legendary', type: 'boots' }, { chance: 0.08, type: 'artifact', itemId: 'world_core_ring', chance: 0.1 }] },
-      { id: 'immortal_sage', name: '仙贤', level: 86, hp: 7500, maxHp: 7500, attack: 750, defense: 180, expReward: 5530, stoneReward: 2765, boss: false, dropTable: [{ chance: 0.6, quality: 'legendary', type: 'ring' }, { chance: 0.08, type: 'artifact', itemId: 'creation_flag', chance: 0.1 }] },
-      { id: 'void_beast', name: '虚空兽', level: 87, hp: 16000, maxHp: 16000, attack: 600, defense: 400, expReward: 5700, stoneReward: 2850, boss: false, dropTable: [{ chance: 0.62, quality: 'legendary', type: 'pants' }, { chance: 0.08, type: 'artifact', itemId: 'celestial_eye', chance: 0.1 }] },
-      { id: 'immortal_sword', name: '仙剑灵', level: 88, hp: 8500, maxHp: 8500, attack: 800, defense: 200, expReward: 5870, stoneReward: 2935, boss: false, dropTable: [{ chance: 0.64, quality: 'legendary', type: 'weapon' }, { chance: 0.08, type: 'artifact', itemId: 'primordial_cauldron', chance: 0.1 }] },
-      { id: 'chaos_beast', name: '混沌兽', level: 89, hp: 18000, maxHp: 18000, attack: 680, defense: 420, expReward: 6050, stoneReward: 3025, boss: false, dropTable: [{ chance: 0.66, quality: 'legendary', type: 'armor' }, { chance: 0.08, type: 'artifact', itemId: 'world_core_ring', chance: 0.11 }] },
+      // 小怪等级81-89级：primordial为主
+      { id: 'immortal_guard', name: '仙卫', level: 81, hp: 8000, maxHp: 8000, attack: 580, defense: 280, expReward: 4740, stoneReward: 2370, boss: false, dropTable: [{ chance: 0.5, quality: 'primordial', type: 'weapon' }, { chance: 0.08, type: 'artifact', itemId: 'world_core_ring', chance: 0.1 }] },
+      { id: 'jade_beast', name: '玉兽', level: 82, hp: 12000, maxHp: 12000, attack: 480, defense: 360, expReward: 4890, stoneReward: 2445, boss: false, dropTable: [{ chance: 0.52, quality: 'primordial', type: 'armor' }, { chance: 0.08, type: 'artifact', itemId: 'creation_flag', chance: 0.1 }] },
+      { id: 'phoenix_spirit', name: '凤凰灵', level: 83, hp: 6000, maxHp: 6000, attack: 700, defense: 160, expReward: 5040, stoneReward: 2520, boss: false, dropTable: [{ chance: 0.54, quality: 'primordial', type: 'necklace' }, { chance: 0.08, type: 'artifact', itemId: 'celestial_eye', chance: 0.1 }] },
+      { id: 'dragon_soul', name: '龙魂', level: 84, hp: 10000, maxHp: 10000, attack: 620, defense: 300, expReward: 5200, stoneReward: 2600, boss: false, dropTable: [{ chance: 0.56, quality: 'primordial', type: 'helmet' }, { chance: 0.08, type: 'artifact', itemId: 'primordial_cauldron', chance: 0.1 }] },
+      { id: 'golden_lion', name: '金狮', level: 85, hp: 14000, maxHp: 14000, attack: 550, defense: 380, expReward: 5360, stoneReward: 2680, boss: false, dropTable: [{ chance: 0.58, quality: 'primordial', type: 'boots' }, { chance: 0.08, type: 'artifact', itemId: 'world_core_ring', chance: 0.1 }] },
+      { id: 'immortal_sage', name: '仙贤', level: 86, hp: 7500, maxHp: 7500, attack: 750, defense: 180, expReward: 5530, stoneReward: 2765, boss: false, dropTable: [{ chance: 0.6, quality: 'primordial', type: 'ring' }, { chance: 0.08, type: 'artifact', itemId: 'creation_flag', chance: 0.1 }] },
+      { id: 'void_beast', name: '虚空兽', level: 87, hp: 16000, maxHp: 16000, attack: 600, defense: 400, expReward: 5700, stoneReward: 2850, boss: false, dropTable: [{ chance: 0.62, quality: 'primordial', type: 'pants' }, { chance: 0.08, type: 'artifact', itemId: 'celestial_eye', chance: 0.1 }] },
+      { id: 'immortal_sword', name: '仙剑灵', level: 88, hp: 8500, maxHp: 8500, attack: 800, defense: 200, expReward: 5870, stoneReward: 2935, boss: false, dropTable: [{ chance: 0.64, quality: 'primordial', type: 'weapon' }, { chance: 0.08, type: 'artifact', itemId: 'primordial_cauldron', chance: 0.1 }] },
+      { id: 'chaos_beast', name: '混沌兽', level: 89, hp: 18000, maxHp: 18000, attack: 680, defense: 420, expReward: 6050, stoneReward: 3025, boss: false, dropTable: [{ chance: 0.66, quality: 'primordial', type: 'armor' }, { chance: 0.08, type: 'artifact', itemId: 'world_core_ring', chance: 0.11 }] },
       // BOSS固定90级
-      { id: 'palace_boss', name: '仙帝残魂', level: 90, hp: 35000, maxHp: 35000, attack: 1000, defense: 550, expReward: 10000, stoneReward: 5000, boss: true, dropTable: [{ chance: 1.0, quality: 'legendary', type: 'weapon' }, { chance: 0.8, quality: 'legendary', type: 'armor' }, { chance: 0.45, type: 'pet', itemName: '灵宠·仙灵', itemId: 'pet_immortal' }, { chance: 0.6, type: 'artifact', itemId: 'primordial_cauldron', chance: 0.28 }] }
+      { id: 'palace_boss', name: '仙帝残魂', level: 90, hp: 35000, maxHp: 35000, attack: 1000, defense: 550, expReward: 10000, stoneReward: 5000, boss: true, dropTable: [{ chance: 1.0, quality: 'primordial', type: 'weapon' }, { chance: 0.8, quality: 'primordial', type: 'armor' }, { chance: 0.45, type: 'pet', itemName: '灵宠·仙灵', itemId: 'pet_immortal' }, { chance: 0.6, type: 'artifact', itemId: 'primordial_cauldron', chance: 0.28 }] }
     ]
   },
   // ==================== 第10图：91-100级（人仙期）====================
@@ -1578,18 +1594,18 @@ export const SCENES: Scene[] = [
     canRest: false,
     artifacts: ['world_core_ring', 'creation_flag', 'celestial_eye', 'primordial_cauldron'],
     monsters: [
-      // 小怪等级91-99级
-      { id: 'immortal_general', name: '仙将', level: 91, hp: 10000, maxHp: 10000, attack: 700, defense: 350, expReward: 6220, stoneReward: 3110, boss: false, dropTable: [{ chance: 0.55, quality: 'legendary', type: 'weapon' }, { chance: 0.08, type: 'artifact', itemId: 'creation_flag', chance: 0.11 }] },
-      { id: 'celestial_beast', name: '天兽', level: 92, hp: 15000, maxHp: 15000, attack: 600, defense: 450, expReward: 6400, stoneReward: 3200, boss: false, dropTable: [{ chance: 0.57, quality: 'legendary', type: 'armor' }, { chance: 0.08, type: 'artifact', itemId: 'celestial_eye', chance: 0.11 }] },
-      { id: 'divine_spirit', name: '神灵', level: 93, hp: 8000, maxHp: 8000, attack: 850, defense: 200, expReward: 6580, stoneReward: 3290, boss: false, dropTable: [{ chance: 0.59, quality: 'legendary', type: 'necklace' }, { chance: 0.08, type: 'artifact', itemId: 'primordial_cauldron', chance: 0.11 }] },
-      { id: 'golden_dragon', name: '金龙', level: 94, hp: 13000, maxHp: 13000, attack: 750, defense: 380, expReward: 6770, stoneReward: 3385, boss: false, dropTable: [{ chance: 0.61, quality: 'legendary', type: 'helmet' }, { chance: 0.08, type: 'artifact', itemId: 'world_core_ring', chance: 0.11 }] },
-      { id: 'phoenix_god', name: '凤凰神', level: 95, hp: 18000, maxHp: 18000, attack: 680, defense: 480, expReward: 6960, stoneReward: 3480, boss: false, dropTable: [{ chance: 0.63, quality: 'legendary', type: 'boots' }, { chance: 0.08, type: 'artifact', itemId: 'creation_flag', chance: 0.11 }] },
-      { id: 'primordial_beast', name: '洪荒兽', level: 96, hp: 22000, maxHp: 22000, attack: 720, defense: 500, expReward: 7160, stoneReward: 3580, boss: false, dropTable: [{ chance: 0.65, quality: 'legendary', type: 'pants' }, { chance: 0.08, type: 'artifact', itemId: 'celestial_eye', chance: 0.11 }] },
-      { id: 'dao_spirit', name: '道灵', level: 97, hp: 9500, maxHp: 9500, attack: 900, defense: 220, expReward: 7360, stoneReward: 3680, boss: false, dropTable: [{ chance: 0.67, quality: 'legendary', type: 'ring' }, { chance: 0.08, type: 'artifact', itemId: 'primordial_cauldron', chance: 0.11 }] },
-      { id: 'heavenly_soldier', name: '天兵统领', level: 98, hp: 20000, maxHp: 20000, attack: 800, defense: 450, expReward: 7560, stoneReward: 3780, boss: false, dropTable: [{ chance: 0.69, quality: 'legendary', type: 'weapon' }, { chance: 0.08, type: 'artifact', itemId: 'world_core_ring', chance: 0.12 }] },
-      { id: 'celestial_guardian', name: '天界守护者', level: 99, hp: 25000, maxHp: 25000, attack: 850, defense: 500, expReward: 7760, stoneReward: 3880, boss: false, dropTable: [{ chance: 0.71, quality: 'legendary', type: 'armor' }, { chance: 0.08, type: 'artifact', itemId: 'creation_flag', chance: 0.12 }] },
-      // BOSS固定100级
-      { id: 'xianlou_boss', name: '仙界之主', level: 100, hp: 50000, maxHp: 50000, attack: 2000, defense: 1000, expReward: 20000, stoneReward: 15000, boss: true, dropTable: [{ chance: 1.0, quality: 'legendary', type: 'weapon' }, { chance: 0.9, quality: 'legendary', type: 'armor' }, { chance: 0.8, quality: 'legendary', type: 'necklace' }, { chance: 0.5, type: 'pet', itemName: '灵宠·真龙', itemId: 'pet_true_dragon' }, { chance: 0.7, type: 'artifact', itemId: 'primordial_cauldron', chance: 0.35 }] }
+      // 小怪等级91-99级：全primordial
+      { id: 'immortal_general', name: '仙将', level: 91, hp: 10000, maxHp: 10000, attack: 700, defense: 350, expReward: 6220, stoneReward: 3110, boss: false, dropTable: [{ chance: 0.55, quality: 'primordial', type: 'weapon' }, { chance: 0.08, type: 'artifact', itemId: 'creation_flag', chance: 0.11 }] },
+      { id: 'celestial_beast', name: '天兽', level: 92, hp: 15000, maxHp: 15000, attack: 600, defense: 450, expReward: 6400, stoneReward: 3200, boss: false, dropTable: [{ chance: 0.57, quality: 'primordial', type: 'armor' }, { chance: 0.08, type: 'artifact', itemId: 'celestial_eye', chance: 0.11 }] },
+      { id: 'divine_spirit', name: '神灵', level: 93, hp: 8000, maxHp: 8000, attack: 850, defense: 200, expReward: 6580, stoneReward: 3290, boss: false, dropTable: [{ chance: 0.59, quality: 'primordial', type: 'necklace' }, { chance: 0.08, type: 'artifact', itemId: 'primordial_cauldron', chance: 0.11 }] },
+      { id: 'golden_dragon', name: '金龙', level: 94, hp: 13000, maxHp: 13000, attack: 750, defense: 380, expReward: 6770, stoneReward: 3385, boss: false, dropTable: [{ chance: 0.61, quality: 'primordial', type: 'helmet' }, { chance: 0.08, type: 'artifact', itemId: 'world_core_ring', chance: 0.11 }] },
+      { id: 'phoenix_god', name: '凤凰神', level: 95, hp: 18000, maxHp: 18000, attack: 680, defense: 480, expReward: 6960, stoneReward: 3480, boss: false, dropTable: [{ chance: 0.63, quality: 'primordial', type: 'boots' }, { chance: 0.08, type: 'artifact', itemId: 'creation_flag', chance: 0.11 }] },
+      { id: 'primordial_beast', name: '洪荒兽', level: 96, hp: 22000, maxHp: 22000, attack: 720, defense: 500, expReward: 7160, stoneReward: 3580, boss: false, dropTable: [{ chance: 0.65, quality: 'primordial', type: 'pants' }, { chance: 0.08, type: 'artifact', itemId: 'celestial_eye', chance: 0.11 }] },
+      { id: 'dao_spirit', name: '道灵', level: 97, hp: 9500, maxHp: 9500, attack: 900, defense: 220, expReward: 7360, stoneReward: 3680, boss: false, dropTable: [{ chance: 0.67, quality: 'primordial', type: 'ring' }, { chance: 0.08, type: 'artifact', itemId: 'primordial_cauldron', chance: 0.11 }] },
+      { id: 'heavenly_soldier', name: '天兵统领', level: 98, hp: 20000, maxHp: 20000, attack: 800, defense: 450, expReward: 7560, stoneReward: 3780, boss: false, dropTable: [{ chance: 0.69, quality: 'primordial', type: 'weapon' }, { chance: 0.08, type: 'artifact', itemId: 'world_core_ring', chance: 0.12 }] },
+      { id: 'celestial_guardian', name: '天界守护者', level: 99, hp: 25000, maxHp: 25000, attack: 850, defense: 500, expReward: 7760, stoneReward: 3880, boss: false, dropTable: [{ chance: 0.71, quality: 'primordial', type: 'armor' }, { chance: 0.08, type: 'artifact', itemId: 'creation_flag', chance: 0.12 }] },
+      // BOSS固定100级：三件primordial
+      { id: 'xianlou_boss', name: '仙界之主', level: 100, hp: 50000, maxHp: 50000, attack: 2000, defense: 1000, expReward: 20000, stoneReward: 15000, boss: true, dropTable: [{ chance: 1.0, quality: 'primordial', type: 'weapon' }, { chance: 0.9, quality: 'primordial', type: 'armor' }, { chance: 0.8, quality: 'primordial', type: 'necklace' }, { chance: 0.5, type: 'pet', itemName: '灵宠·真龙', itemId: 'pet_true_dragon' }, { chance: 0.7, type: 'artifact', itemId: 'primordial_cauldron', chance: 0.35 }] }
     ]
   }
 ]
@@ -1606,6 +1622,38 @@ export const LEGENDARY_ITEMS: Omit<Equipment, 'id'>[] = [
   { name: '万灵珠', type: 'necklace', quality: 'legendary', attackBonus: 400, defenseBonus: 100, hpBonus: 4000 },
   { name: '天魔战戟', type: 'weapon', quality: 'legendary', attackBonus: 600, defenseBonus: 150, hpBonus: 3000 },
   { name: '星辰坠', type: 'ring', quality: 'legendary', attackBonus: 350, defenseBonus: 300, hpBonus: 3500 }
+]
+
+// 神话品质装备列表（61-80级，合体期-渡劫期）
+export const DIVINE_ITEMS: Omit<Equipment, 'id'>[] = [
+  { name: '毁灭战刃', type: 'weapon', quality: 'divine', attackBonus: 1200, defenseBonus: 300, hpBonus: 6000 },
+  { name: '天罚项链', type: 'necklace', quality: 'divine', attackBonus: 600, defenseBonus: 500, hpBonus: 10000 },
+  { name: '混沌战甲', type: 'armor', quality: 'divine', attackBonus: 400, defenseBonus: 1200, hpBonus: 15000 },
+  { name: '命运之戒', type: 'ring', quality: 'divine', attackBonus: 800, defenseBonus: 600, hpBonus: 8000 },
+  { name: '虚空战靴', type: 'boots', quality: 'divine', attackBonus: 500, defenseBonus: 900, hpBonus: 5000 },
+  { name: '诸神头盔', type: 'helmet', quality: 'divine', attackBonus: 700, defenseBonus: 800, hpBonus: 7000 },
+  { name: '天道法剑', type: 'weapon', quality: 'divine', attackBonus: 1500, defenseBonus: 200, hpBonus: 4000 },
+  { name: '轮回珠', type: 'necklace', quality: 'divine', attackBonus: 900, defenseBonus: 400, hpBonus: 12000 },
+  { name: '弑仙戟', type: 'weapon', quality: 'divine', attackBonus: 1300, defenseBonus: 500, hpBonus: 8000 },
+  { name: '太虚坠', type: 'ring', quality: 'divine', attackBonus: 850, defenseBonus: 700, hpBonus: 10000 },
+  { name: '神罚战裤', type: 'pants', quality: 'divine', attackBonus: 600, defenseBonus: 1000, hpBonus: 8000 },
+  { name: '万古战靴', type: 'boots', quality: 'divine', attackBonus: 550, defenseBonus: 1100, hpBonus: 6000 }
+]
+
+// 太古品质装备列表（81-100级，大乘期-人仙期）
+export const PRIMORDIAL_ITEMS: Omit<Equipment, 'id'>[] = [
+  { name: '创世神剑', type: 'weapon', quality: 'primordial', attackBonus: 2500, defenseBonus: 500, hpBonus: 15000 },
+  { name: '永恒神链', type: 'necklace', quality: 'primordial', attackBonus: 1500, defenseBonus: 1200, hpBonus: 25000 },
+  { name: '混沌神甲', type: 'armor', quality: 'primordial', attackBonus: 800, defenseBonus: 2500, hpBonus: 35000 },
+  { name: '命运神戒', type: 'ring', quality: 'primordial', attackBonus: 1800, defenseBonus: 1500, hpBonus: 20000 },
+  { name: '虚空神靴', type: 'boots', quality: 'primordial', attackBonus: 1200, defenseBonus: 2000, hpBonus: 12000 },
+  { name: '天道神冠', type: 'helmet', quality: 'primordial', attackBonus: 1500, defenseBonus: 1800, hpBonus: 15000 },
+  { name: '元始神剑', type: 'weapon', quality: 'primordial', attackBonus: 3000, defenseBonus: 400, hpBonus: 10000 },
+  { name: '轮回神珠', type: 'necklace', quality: 'primordial', attackBonus: 2000, defenseBonus: 1000, hpBonus: 30000 },
+  { name: '天罚神戟', type: 'weapon', quality: 'primordial', attackBonus: 2800, defenseBonus: 800, hpBonus: 18000 },
+  { name: '太虚神坠', type: 'ring', quality: 'primordial', attackBonus: 1900, defenseBonus: 1600, hpBonus: 25000 },
+  { name: '神罚神裤', type: 'pants', quality: 'primordial', attackBonus: 1400, defenseBonus: 2200, hpBonus: 18000 },
+  { name: '万古神靴', type: 'boots', quality: 'primordial', attackBonus: 1300, defenseBonus: 2400, hpBonus: 14000 }
 ]
 
 // 灵宠模板

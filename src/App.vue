@@ -10,6 +10,7 @@ const router = useRouter()
 
 // 是否已登录
 const isLoggedIn = computed(() => authStore.isLoggedIn)
+const isGM = computed(() => authStore.isGM)
 const currentUsername = computed(() => authStore.currentUser?.username)
 
 // 初始化
@@ -46,7 +47,11 @@ function logout() {
           <span class="user-info">
             <el-icon><User /></el-icon>
             {{ currentUsername }}
+            <span v-if="isGM" class="gm-tag">GM</span>
           </span>
+          <router-link v-if="isGM" to="/gm">
+            <el-button type="warning" size="small" plain>GM后台</el-button>
+          </router-link>
           <el-button link @click="logout">
             <el-icon><SwitchButton /></el-icon>
             退出
@@ -120,6 +125,15 @@ function logout() {
   gap: 6px;
   color: var(--text-secondary);
   font-size: 0.9rem;
+}
+
+.gm-tag {
+  padding: 2px 8px;
+  background: linear-gradient(135deg, #f5576c 0%, #f093fb 100%);
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: bold;
+  color: white;
 }
 
 /* 主内容区域 */

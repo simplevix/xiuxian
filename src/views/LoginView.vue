@@ -32,8 +32,14 @@ async function handleLogin() {
     })
 
     if (result.success) {
-      ElMessage.success(`欢迎回来，${authStore.currentUser?.username}！`)
-      router.push('/')
+      // GM账号跳转到GM页面
+      if (result.isGM) {
+        ElMessage.success('GM登录成功')
+        router.push('/gm')
+      } else {
+        ElMessage.success(`欢迎回来，${authStore.currentUser?.username}！`)
+        router.push('/')
+      }
     } else {
       ElMessage.error(result.message)
     }
