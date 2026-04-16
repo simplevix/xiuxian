@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { usePlayerStore } from '@/stores/player'
-import { QUALITIES, LEGENDARY_ITEMS, ARTIFACT_TEMPLATES, TECHNIQUE_TEMPLATES, TECHNIQUE_QUALITIES, REALMS } from '@/types/game'
-import { generateEquipment } from '@/utils/random'
+import { QUALITIES, ARTIFACT_TEMPLATES, TECHNIQUE_TEMPLATES, TECHNIQUE_QUALITIES, REALMS } from '@/types/game'
+import { generateEquipment, generateId } from '@/utils/random'
+import { getSpecialItems } from '@/utils/equipmentLoader'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { Equipment, Artifact, Technique } from '@/types/game'
 
@@ -23,6 +24,23 @@ function getDrawChance(tier: number) {
   return chances[Math.min(tier, chances.length - 1)]
 }
 
+/**
+ * 从 CSV special_items 中随机抽取指定品质的装备
+ * 支持 legendary / divine / primordial 三档
+ */
+function drawSpecialItem(quality: 'legendary' | 'divine' | 'primordial'): Equipment {
+  const { legendaryItems, divineItems, primordialItems } = getSpecialItems()
+  const pool = quality === 'primordial' ? primordialItems
+              : quality === 'divine'    ? divineItems
+              : legendaryItems
+  if (pool.length === 0) {
+    // 兜底：回落到随机生成
+    return generateEquipment('weapon', quality)
+  }
+  const template = pool[Math.floor(Math.random() * pool.length)]
+  return { ...template, id: generateId() }
+}
+
 function doDraw(tier: number) {
   if (!player.value) return
   const cost = getDrawCost(tier)
@@ -35,35 +53,50 @@ function doDraw(tier: number) {
   const roll = Math.random()
 
   // 逐级判断产出品质 - 根据抽奖档次限制最低品质
-  let quality: keyof typeof QUALITIES = 'common'
-  
+  // qualityOrder 包含仙器以下的常规品质
+  type NormalQuality = 'common' | 'good' | 'rare' | 'epic'
+  type DrawQuality = NormalQuality | 'legendary' | 'divine'
+
   // 各档次最低品质：1-青铜 2-白银 3-黄金 4-钻石 5-仙缘
-  const minQuality: Record<number, keyof typeof QUALITIES> = {
-    1: 'common',   // 青铜抽奖：普通及以上
-    2: 'good',     // 白银抽奖：优秀及以上
-    3: 'rare',     // 黄金抽奖：稀有及以上
-    4: 'epic',     // 钻石抽奖：史诗及以上
-    5: 'legendary' // 仙缘抽奖：只出仙器
-  }
-  
-  const minQ = minQuality[tier] || 'common'
-  
-  if (roll < getDrawChance(tier + 1)) quality = 'legendary'
-  else if (roll < getDrawChance(tier)) quality = 'epic'
-  else if (roll < getDrawChance(tier - 1)) quality = 'rare'
-  else if (roll < getDrawChance(tier - 2)) quality = 'good'
-  
-  // 确保不低于该档次的最低品质
-  const qualityOrder: (keyof typeof QUALITIES)[] = ['common', 'good', 'rare', 'epic', 'legendary']
-  const rolledIndex = qualityOrder.indexOf(quality)
-  const minIndex = qualityOrder.indexOf(minQ)
-  if (rolledIndex < minIndex) {
-    quality = minQ
+  const minQuality: Record<number, DrawQuality> = {
+    1: 'common',
+    2: 'good',
+    3: 'rare',
+    4: 'epic',
+    5: 'legendary'
   }
 
-  // 包含裤子类型
-  const types: Array<'weapon' | 'armor' | 'helmet' | 'pants' | 'boots' | 'necklace' | 'ring'> = ['weapon', 'armor', 'helmet', 'pants', 'boots', 'necklace', 'ring']
-  const equip = generateEquipment(types[Math.floor(Math.random() * types.length)], quality)
+  const minQ = minQuality[tier] || 'common'
+
+  // 仙缘档（tier=5）：5%概率神话，95%仙器
+  // 钻石及以下：按原概率梯度，最高出legendary
+  let quality: DrawQuality
+  if (tier === 5) {
+    quality = roll < 0.05 ? 'divine' : 'legendary'
+  } else {
+    if (roll < getDrawChance(tier + 1)) quality = 'legendary'
+    else if (roll < getDrawChance(tier)) quality = 'epic'
+    else if (roll < getDrawChance(tier - 1)) quality = 'rare'
+    else if (roll < getDrawChance(tier - 2)) quality = 'good'
+    else quality = 'common'
+
+    // 确保不低于该档次的最低品质
+    const qualityOrder: DrawQuality[] = ['common', 'good', 'rare', 'epic', 'legendary']
+    const rolledIndex = qualityOrder.indexOf(quality)
+    const minIndex = qualityOrder.indexOf(minQ)
+    if (rolledIndex < minIndex) {
+      quality = minQ
+    }
+  }
+
+  // 生成装备：仙器及以上直接从 CSV 特殊装备池抽取，其余品质随机生成（含套装概率）
+  let equip: Equipment
+  if (quality === 'legendary' || quality === 'divine' || quality === 'primordial') {
+    equip = drawSpecialItem(quality as 'legendary' | 'divine' | 'primordial')
+  } else {
+    const types: Array<'weapon' | 'armor' | 'helmet' | 'pants' | 'boots' | 'necklace' | 'ring'> = ['weapon', 'armor', 'helmet', 'pants', 'boots', 'necklace', 'ring']
+    equip = generateEquipment(types[Math.floor(Math.random() * types.length)], quality as NormalQuality)
+  }
 
   drawResult.value = equip
   drawAnimation.value = true
@@ -71,12 +104,16 @@ function doDraw(tier: number) {
 
   setTimeout(() => { drawAnimation.value = false }, 3000)
 
-  const q = QUALITIES[quality]
+  const qualityDisplayName: Record<string, string> = {
+    common: '普通', good: '优秀', rare: '稀有', epic: '史诗',
+    legendary: '仙器', divine: '神话'
+  }
+  const qName = qualityDisplayName[quality] ?? quality
   const tierName = ['单抽', '青铜抽奖', '白银抽奖', '黄金抽奖', '钻石抽奖', '仙缘抽奖'][tier]
-  const emoji = quality === 'legendary' ? '🎉' : quality === 'epic' ? '✨' : quality === 'rare' ? '🌟' : '📦'
+  const emoji = quality === 'divine' ? '🌈' : quality === 'legendary' ? '🎉' : quality === 'epic' ? '✨' : quality === 'rare' ? '🌟' : '📦'
   ElMessage({
-    type: quality === 'legendary' ? 'success' : 'info',
-    message: `${emoji} ${tierName}获得 ${q.name}装备 【${equip.name}】！`
+    type: quality === 'legendary' || quality === 'divine' ? 'success' : 'info',
+    message: `${emoji} ${tierName}获得 ${qName}装备 【${equip.name}】！`
   })
 }
 
@@ -266,12 +303,16 @@ const shopItems = computed(() => {
   const tier = Math.min(Math.floor(player.value.realmIndex / 2), 5)
   const items: Array<{ equip: Omit<Equipment, 'id'>; price: number }> = []
 
-  // 每次刷新随机生成几个
-  const seed = Math.floor(Date.now() / 60000) // 每分钟刷新
+  // 每次刷新随机生成几个（基于分钟级种子，同一分钟内结果固定）
+  const seed = Math.floor(Date.now() / 60000)
   const rng = (n: number) => ((seed * 9301 + 49297) % 233280) / 233280 * n
 
-  const pool = [
-    ...LEGENDARY_ITEMS.slice(0, 2 + tier),
+  // 从 CSV legendary 池里取前 (2+tier) 个仙器加入直购池
+  const { legendaryItems } = getSpecialItems()
+  const legendaryPool = legendaryItems.slice(0, 2 + tier)
+
+  const pool: Omit<Equipment, 'id'>[] = [
+    ...legendaryPool,
     { name: '玄铁剑', type: 'weapon' as const, quality: 'rare' as const, attackBonus: 120 + tier * 40, defenseBonus: 20 + tier * 10, hpBonus: 300 + tier * 100 },
     { name: '天蚕衣', type: 'armor' as const, quality: 'rare' as const, attackBonus: 20 + tier * 10, defenseBonus: 100 + tier * 30, hpBonus: 500 + tier * 150 },
     { name: '疾风靴', type: 'boots' as const, quality: 'good' as const, attackBonus: 30 + tier * 15, defenseBonus: 40 + tier * 20, hpBonus: 200 + tier * 80 },
@@ -285,8 +326,8 @@ const shopItems = computed(() => {
     const idx = Math.floor(rng(pool.length - i))
     const item = pool.splice(idx, 1)[0]
     const q = item.quality
-    const prices = { common: 80, good: 200, rare: 500, epic: 1500, legendary: 5000 }
-    items.push({ equip: item, price: Math.floor((prices[q] || 200) * (1 + tier * 0.3)) })
+    const prices: Record<string, number> = { common: 80, good: 200, rare: 500, epic: 1500, legendary: 5000 }
+    items.push({ equip: item, price: Math.floor((prices[q] ?? 200) * (1 + tier * 0.3)) })
   }
   return items
 })
@@ -376,7 +417,7 @@ const activeShopTab = ref('gacha')
         <div class="pool-item legendary">
           <span class="pool-label">仙缘抽奖</span>
           <span class="pool-cost">💎 5000</span>
-          <span class="pool-note">必出好物</span>
+          <span class="pool-note">仙器+ · 5%神话</span>
         </div>
         <div class="pool-item epic">
           <span class="pool-label">钻石抽奖</span>

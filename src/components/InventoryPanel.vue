@@ -5,6 +5,10 @@ import { QUALITIES, SET_CONFIGS, TECHNIQUE_QUALITIES } from '@/types/game'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import type { Equipment, EquipmentType, EquipmentSlots, Technique, EquipmentQuality } from '@/types/game'
 
+// ── 必须先声明 store 和 player，其他代码才能引用 ──
+const playerStore = usePlayerStore()
+const player = computed(() => playerStore.player)
+
 // 自动出售设置
 const autoSellEnabled = ref(false)
 const autoSellMinQuality = ref<EquipmentQuality>('common')
@@ -58,9 +62,6 @@ const qualityOptions: EquipmentQuality[] = ['common', 'good', 'rare', 'epic', 'l
 function getQualityLabel(quality: EquipmentQuality): string {
   return QUALITIES[quality]?.name || '普通'
 }
-
-const playerStore = usePlayerStore()
-const player = computed(() => playerStore.player)
 
 const inventory = computed(() => player.value?.inventory || [])
 const equipped = computed(() => player.value?.equipment || {
@@ -180,10 +181,7 @@ const equipSlots: { key: EquipmentType; icon: string; label: string }[] = [
 
 function equipItem(item: Equipment) {
   playerStore.equipItem(item)
-  const idx = player.value!.inventory.findIndex(i => i.id === item.id)
-  if (idx > -1) {
-    player.value!.inventory.splice(idx, 1)
-  }
+  playerStore.removeFromInventory(item.id)
   ElMessage.success(`已装备 ${item.name}`)
 }
 
@@ -203,11 +201,7 @@ function sellItem(item: Equipment) {
     '出售确认',
     { confirmButtonText: '出售', cancelButtonText: '取消', type: 'warning' }
   ).then(() => {
-    playerStore.addSpiritStones(finalPrice)
-    const idx = player.value!.inventory.findIndex(i => i.id === item.id)
-    if (idx > -1) {
-      player.value!.inventory.splice(idx, 1)
-    }
+    playerStore.sellItems([item.id], finalPrice)
     ElMessage.success(`获得 ${finalPrice} 灵石`)
   }).catch(() => {})
 }
@@ -228,15 +222,14 @@ const typeIcons: Record<string, string> = {
 // 灵宠切换
 function selectPet(petId: string) {
   if (!player.value) return
-  if (player.value.currentPetId === petId) {
-    player.value.currentPetId = undefined
+  const wasSelected = player.value.currentPetId === petId
+  playerStore.selectPet(petId)
+  if (wasSelected) {
     ElMessage.info('灵宠已休息')
   } else {
-    player.value.currentPetId = petId
     const pet = player.value.pets.find(p => p.id === petId)
     ElMessage.success(`灵宠 ${pet?.name || ''} 上阵！`)
   }
-  playerStore.recalcStats()
 }
 
 function getPetGradeStars(grade: number) {
@@ -300,15 +293,8 @@ function sellByCategory() {
     '一键出售确认',
     { confirmButtonText: '确认出售', cancelButtonText: '取消', type: 'warning' }
   ).then(() => {
-    // 移除所有选中分类的物品
     const toSell = [...sellCategoryItems.value]
-    toSell.forEach(item => {
-      const idx = player.value!.inventory.findIndex(i => i.id === item.id)
-      if (idx > -1) {
-        player.value!.inventory.splice(idx, 1)
-      }
-    })
-    playerStore.addSpiritStones(totalPrice)
+    playerStore.sellItems(toSell.map(i => i.id), totalPrice)
     ElMessage.success(`已出售 ${count} 件装备，获得 ${totalPrice} 灵石`)
     sellQuality.value = ''
   }).catch(() => {})
@@ -340,13 +326,7 @@ function sellAllExceptLegendary() {
     '一键出售确认',
     { confirmButtonText: '确认出售', cancelButtonText: '取消', type: 'warning' }
   ).then(() => {
-    toSell.forEach(item => {
-      const idx = player.value!.inventory.findIndex(i => i.id === item.id)
-      if (idx > -1) {
-        player.value!.inventory.splice(idx, 1)
-      }
-    })
-    playerStore.addSpiritStones(totalPrice)
+    playerStore.sellItems(toSell.map(i => i.id), totalPrice)
     ElMessage.success(`已出售 ${toSell.length} 件装备，获得 ${totalPrice} 灵石`)
   }).catch(() => {})
 }

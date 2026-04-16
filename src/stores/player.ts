@@ -474,6 +474,34 @@ export const usePlayerStore = defineStore('player', () => {
     if (player.value) player.value.spiritStones += amount
   }
 
+  // 从背包移除单个装备（通过 id）
+  function removeFromInventory(itemId: string) {
+    if (!player.value) return
+    const idx = player.value.inventory.findIndex(i => i.id === itemId)
+    if (idx > -1) player.value.inventory.splice(idx, 1)
+  }
+
+  // 从背包批量移除装备并扣除灵石
+  function sellItems(itemIds: string[], totalPrice: number) {
+    if (!player.value) return
+    for (const id of itemIds) {
+      const idx = player.value.inventory.findIndex(i => i.id === id)
+      if (idx > -1) player.value.inventory.splice(idx, 1)
+    }
+    player.value.spiritStones += totalPrice
+  }
+
+  // 选择/取消选择灵宠
+  function selectPet(petId: string) {
+    if (!player.value) return
+    if (player.value.currentPetId === petId) {
+      player.value.currentPetId = undefined
+    } else {
+      player.value.currentPetId = petId
+    }
+    recalcStats()
+  }
+
   // 受伤
   function takeDamage(damage: number) {
     if (!player.value) return
@@ -1144,6 +1172,9 @@ export const usePlayerStore = defineStore('player', () => {
     breakThrough,
     addExp,
     addSpiritStones,
+    removeFromInventory,
+    sellItems,
+    selectPet,
     takeDamage,
     heal,
     fullHeal,

@@ -1,5 +1,6 @@
 import type { Equipment, QualityId, EquipmentType } from '@/types/game'
 import { SET_CONFIGS, SET_EQUIPMENT_TEMPLATES, REALMS } from '@/types/game'
+import { getRandomEquipNameFromPool } from './equipmentLoader'
 
 export const generateId = () => Math.random().toString(36).substring(2, 15) + Date.now().toString(36)
 
@@ -110,29 +111,8 @@ function generateSetEquipment(type: EquipmentType, quality: QualityId, playerLev
 }
 
 function generateEquipName(type: EquipmentType, quality: QualityId): string {
-  const prefixes: Record<string, string[]> = {
-    common: ['铁', '木', '铜', '石', '皮'],
-    good: ['精钢', '玄木', '白银', '玉石', '兽皮'],
-    rare: ['灵', '玄', '紫', '碧', '青'],
-    epic: ['天罡', '地煞', '日月', '星河', '云霄'],
-    legendary: ['太初', '混沌', '鸿蒙', '九天', '乾坤'],
-    divine: ['天道', '神罚', '轮回', '命运', '虚空'],
-    primordial: ['元始', '永恒', '创世', '万古', '太虚']
-  }
-
-  const names: Record<string, string[]> = {
-    weapon: ['剑', '刀', '戟', '杖', '斧'],
-    armor: ['甲', '衣', '铠', '袍', '衫'],
-    helmet: ['冠', '盔', '帽', '巾', '笠'],
-    pants: ['裤', '裳', '裙', '袍', '带'],
-    boots: ['靴', '履', '鞋', '屐', '袜'],
-    necklace: ['链', '坠', '珠', '环', '佩'],
-    ring: ['戒', '环', '镯', '铃', '符']
-  }
-
-  const pre = (prefixes[quality] || prefixes.common)[Math.floor(Math.random() * (prefixes[quality] || prefixes.common).length)]
-  const suf = (names[type] || names.ring)[Math.floor(Math.random() * (names[type] || names.ring).length)]
-  return `${pre}${suf}`
+  // 优先使用CSV装备池
+  return getRandomEquipNameFromPool(quality, type)
 }
 
 export function randomInt(min: number, max: number): number {

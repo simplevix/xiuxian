@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { createUser, verifyLogin, getUserById, initDatabase } from '@/utils/database'
+import { createUserRecord, verifyUserLogin, getUserById, initDatabase } from '@/utils/database'
 
 // GM账号配置
 const GM_USERNAME = 'admin'
@@ -85,7 +85,7 @@ export const useAuthStore = defineStore('auth', () => {
         return { success: false, message: '两次输入的密码不一致' }
       }
 
-      const result = await createUser(form.username.trim(), form.email.trim(), form.password)
+      const result = await createUserRecord(form.username.trim(), form.email.trim(), form.password)
 
       if (result.success && result.user) {
         const user: User = {
@@ -140,7 +140,7 @@ export const useAuthStore = defineStore('auth', () => {
         return { success: false, message: '请输入密码' }
       }
 
-      const result = await verifyLogin(form.username.trim(), form.password)
+      const result = await verifyUserLogin(form.username.trim(), form.password)
 
       if (result.success && result.user) {
         const user: User = {

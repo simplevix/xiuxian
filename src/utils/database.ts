@@ -10,7 +10,7 @@ export interface UserRecord {
   email: string
   passwordHash: string
   avatar?: string
-  createdAt: number
+  created_at: number
 }
 
 // ==================== HTTP API 客户端 ====================
@@ -50,9 +50,10 @@ export async function createUserRecord(
   username: string,
   email: string,
   passwordHash: string
-): Promise<UserRecord> {
+): Promise<UserRecord & { success: boolean; message: string }> {
   const data = await apiClient<{
     success: boolean
+    message: string
     user: { id: string; username: string; email: string; createdAt: number }
   }>('/users/register', {
     method: 'POST',
@@ -60,11 +61,13 @@ export async function createUserRecord(
   })
 
   return {
+    success: data.success,
+    message: data.message,
     id: data.user.id,
     username: data.user.username,
     email: data.user.email,
     passwordHash,
-    createdAt: data.user.createdAt
+    created_at: data.user.createdAt
   }
 }
 
@@ -91,7 +94,7 @@ export async function verifyUserLogin(
       username: data.user.username,
       email: data.user.email,
       avatar: data.user.avatar,
-      createdAt: data.user.createdAt
+      created_at: data.user.createdAt
     }
   } catch (error) {
     // 401 错误表示登录失败
@@ -112,7 +115,13 @@ export async function getUserById(id: string): Promise<Omit<UserRecord, 'passwor
       avatar?: string
       createdAt: number
     }>(`/users/${id}`)
-    return data
+    return {
+      id: data.id,
+      username: data.username,
+      email: data.email,
+      avatar: data.avatar,
+      created_at: data.createdAt
+    }
   } catch (error) {
     if (error instanceof Error && error.message.includes('404')) {
       return null
@@ -135,6 +144,9 @@ export async function getUserByUsername(username: string): Promise<Omit<UserReco
 // ==================== 初始化 ====================
 
 /** 初始化数据库连接 */
-export async function initSaveManager(): Promise<void> {
+export async function initDatabase(): Promise<void> {
   console.log('使用后端 SQLite 用户系统')
 }
+
+// 别名兼容
+export const initSaveManager = initDatabase

@@ -1,0 +1,66 @@
+# 装备掉落池配置
+# 格式: quality,type,prefix1,prefix2,...
+# 每行定义一个品质+类型的装备前缀池
+
+# 普通品质
+common,weapon,铁剑,木剑,铜剑,石剑,皮剑,骨剑,竹剑
+common,armor,布衣,皮甲,木甲,铜甲,石甲
+common,helmet,草帽,布巾,皮帽,木冠
+common,pants,短裤,布裤,皮裤,木裤
+common,boots,草鞋,布鞋,木鞋,皮靴
+common,necklace,木链,石坠,骨链,贝佩
+common,ring,木戒,石戒,铁戒,骨戒
+
+# 优秀品质
+good,weapon,精钢剑,玄木剑,白银剑,玉石剑,兽皮剑,铁剑,钢刀
+good,armor,皮甲,布甲,铁甲,银甲,皮袍
+good,helmet,皮帽,铁盔,银冠,铜笠
+good,pants,皮裤,铁裤,银带,布裳
+good,boots,皮靴,铁靴,银履,铜鞋
+good,necklace,银链,玉坠,金佩,银环
+good,ring,银戒,玉镯,金环,银铃
+
+# 稀有品质
+rare,weapon,灵剑,玄剑,紫剑,碧剑,青剑,银光剑,寒铁剑
+rare,armor,灵甲,玄袍,紫衣,碧衫,青铠,银鳞甲
+rare,helmet,灵冠,玄笠,紫盔,碧巾,青帽
+rare,pants,灵裤,玄裳,紫裙,碧袍,青带
+rare,boots,灵靴,玄履,紫鞋,碧屐,青袜
+rare,necklace,灵链,玄珠,紫坠,碧环,青佩
+rare,ring,灵戒,玄环,紫镯,碧铃,青符
+
+# 史诗品质
+epic,weapon,天罡剑,地煞剑,日月剑,星河剑,云霄剑,烈焰剑,寒冰剑
+epic,armor,天罡甲,地煞袍,日月铠,星河衫,云霄衣,烈焰甲
+epic,helmet,天罡冠,地煞盔,日月笠,星河巾,云霄帽
+epic,pants,天罡裤,地煞裳,日月裙,星河袍,云霄带
+epic,boots,天罡靴,地煞履,日月鞋,星河屐,云霄袜
+epic,necklace,天罡坠,地煞珠,日月经,星河链,云霄佩
+epic,ring,天罡戒,地煞环,日月镯,星河铃,云霄符
+
+# 仙器品质
+legendary,weapon,太初剑,混沌剑,鸿蒙剑,九天剑,乾坤剑,太极剑,玄黄剑
+legendary,armor,太初甲,混沌袍,鸿蒙铠,九天衫,乾坤衣,太极甲,玄黄袍
+legendary,helmet,太初冠,混沌盔,鸿蒙笠,九天巾,乾坤帽,太极冠,玄黄笠
+legendary,pants,太初裤,混沌裳,鸿蒙裙,九天袍,乾坤带,太极裤,玄黄裳
+legendary,boots,太初靴,混沌履,鸿蒙鞋,九天屐,乾坤袜,太极靴,玄黄履
+legendary,necklace,太初链,混沌珠,鸿蒙坠,九天环,乾坤佩,太初坠,玄黄链
+legendary,ring,太初戒,混沌环,鸿蒙镯,九天铃,乾坤符,太极戒,玄黄环
+
+# 神话品质
+divine,weapon,天道剑,神罚剑,轮回剑,命运剑,虚空剑,审判剑,永生剑
+divine,armor,天道甲,神罚袍,轮回铠,命运衫,虚空衣,审判甲,永生袍
+divine,helmet,天道冠,神罚盔,轮回笠,命运巾,虚空帽,审判冠,永生笠
+divine,pants,天道裤,神罚裳,轮回裙,命运袍,虚空带,审判裤,永生裳
+divine,boots,天道靴,神罚履,轮回鞋,命运屐,虚空袜,审判靴,永生履
+divine,necklace,天道坠,神罚珠,轮回经,命运链,虚空佩,审判坠,永生珠
+divine,ring,天道戒,神罚环,轮回镯,命运铃,虚空符,审判戒,永生环
+
+# 太古品质
+primordial,weapon,元始剑,永恒剑,创世剑,万古剑,太虚剑,混沌起源剑,天命剑
+primordial,armor,元始甲,永恒袍,创世铠,万古衫,太虚衣,混沌起源甲,天命袍
+primordial,helmet,元始冠,永恒盔,创世笠,万古巾,太虚帽,混沌起源冠,天命笠
+primordial,pants,元始裤,永恒裳,创世裙,万古袍,太虚带,混沌起源裤,天命裳
+primordial,boots,元始靴,永恒履,创世鞋,万古屐,太虚袜,混沌起源靴,天命履
+primordial,necklace,元始链,永恒珠,创世坠,万古环,太虚佩,混沌起源链,天命坠
+primordial,ring,元始戒,永恒环,创世镯,万古铃,太虚符,混沌起源戒,天命环
