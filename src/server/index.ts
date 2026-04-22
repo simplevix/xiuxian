@@ -15,11 +15,14 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-const DB_PATH = path.join(__dirname, '../../data/game.db');
+// 外部数据库路径 - 指向独立部署的 SQLite 数据库
+const EXTERNAL_DB_PATH = 'C:/Users/admin/Desktop/仙途sqlit数据库/data/xiantu.db';
+const DB_PATH = path.resolve(EXTERNAL_DB_PATH);
 let db: Database.Database;
 
 function initDatabase() {
-  const dataDir = path.join(__dirname, '../../data');
+  // 确保数据库文件所在目录存在
+  const dataDir = path.dirname(DB_PATH);
   if (!fs.existsSync(dataDir)) {
     fs.mkdirSync(dataDir, { recursive: true });
   }
@@ -257,6 +260,79 @@ app.get('/api/users/:id', (req, res) => {
   } catch (error) {
     console.error('获取用户信息失败:', error);
     res.status(500).json({ error: '获取用户信息失败' });
+  }
+});
+
+// ==================== GM管理 API ====================
+
+// 获取所有用户列表（GM用）
+app.get('/api/gm/users', (req, res) => {
+  try {
+    const stmt = db.prepare('SELECT id, username, email, avatar, created_at FROM users ORDER BY created_at DESC');
+    const rows = stmt.all() as any[];
+    res.json(rows.map(row => ({
+      id: row.id,
+      username: row.username,
+      email: row.email,
+      avatar: row.avatar,
+      createdAt: row.created_at
+    })));
+  } catch (error) {
+    console.error('获取用户列表失败:', error);
+    res.status(500).json({ error: '获取用户列表失败' });
+  }
+});
+
+// 获取所有存档列表（GM用）
+app.get('/api/gm/saves', (req, res) => {
+  try {
+    const stmt = db.prepare(`
+      SELECT character_name, player_data, version, saved_at 
+      FROM players 
+      ORDER BY saved_at DESC
+    `);
+    const rows = stmt.all() as any[];
+    res.json(rows.map(row => {
+      const playerData = JSON.parse(row.player_data);
+      return {
+        characterName: row.character_name,
+        userId: playerData.userId || null,
+        realmIndex: playerData.realmIndex || 0,
+        realmLevel: playerData.realmLevel || 0,
+        level: playerData.level || 1,
+        spiritStones: playerData.spiritStones || 0,
+        version: row.version,
+        savedAt: row.saved_at
+      };
+    }));
+  } catch (error) {
+    console.error('获取存档列表失败:', error);
+    res.status(500).json({ error: '获取存档列表失败' });
+  }
+});
+
+// GM修改指定玩家存档
+app.post('/api/gm/saves/:characterName', (req, res) => {
+  try {
+    const { characterName } = req.params;
+    const playerData = req.body;
+
+    if (!playerData || typeof playerData !== 'object') {
+      res.status(400).json({ error: '存档数据格式无效' });
+      return;
+    }
+
+    const now = Math.floor(Date.now() / 1000);
+    const stmt = db.prepare(`
+      INSERT OR REPLACE INTO players (character_name, player_data, version, saved_at) 
+      VALUES (?, ?, ?, ?)
+    `);
+    stmt.run(characterName, JSON.stringify(playerData), 1, now);
+
+    res.json({ success: true, message: '存档修改成功' });
+  } catch (error) {
+    console.error('修改存档失败:', error);
+    res.status(500).json({ error: '修改存档失败' });
   }
 });
 

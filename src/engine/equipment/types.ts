@@ -139,6 +139,25 @@ export interface EnhancementLevel {
 }
 
 /**
+ * 强化等级配置（+0到+12）
+ */
+export const ENHANCEMENT_LEVELS: EnhancementLevel[] = [
+  { level: 0, name: '+0', statMultiplier: 1.0, extraAffixSlots: 0, requiredMaterials: [], successRate: 1.0 },
+  { level: 1, name: '+1', statMultiplier: 1.1, extraAffixSlots: 0, requiredMaterials: [{ itemId: 'enhance_stone', count: 1 }], successRate: 1.0 },
+  { level: 2, name: '+2', statMultiplier: 1.2, extraAffixSlots: 0, requiredMaterials: [{ itemId: 'enhance_stone', count: 2 }], successRate: 1.0 },
+  { level: 3, name: '+3', statMultiplier: 1.3, extraAffixSlots: 0, requiredMaterials: [{ itemId: 'enhance_stone', count: 3 }], successRate: 1.0 },
+  { level: 4, name: '+4', statMultiplier: 1.4, extraAffixSlots: 0, requiredMaterials: [{ itemId: 'enhance_stone', count: 5 }], successRate: 0.95 },
+  { level: 5, name: '+5', statMultiplier: 1.5, extraAffixSlots: 0, requiredMaterials: [{ itemId: 'enhance_stone', count: 8 }], successRate: 0.9 },
+  { level: 6, name: '+6', statMultiplier: 1.6, extraAffixSlots: 1, requiredMaterials: [{ itemId: 'enhance_stone', count: 12 }], successRate: 0.85 },
+  { level: 7, name: '+7', statMultiplier: 1.7, extraAffixSlots: 1, requiredMaterials: [{ itemId: 'enhance_stone', count: 18 }], successRate: 0.8 },
+  { level: 8, name: '+8', statMultiplier: 1.8, extraAffixSlots: 1, requiredMaterials: [{ itemId: 'enhance_stone', count: 25 }], successRate: 0.75 },
+  { level: 9, name: '+9', statMultiplier: 1.9, extraAffixSlots: 2, requiredMaterials: [{ itemId: 'enhance_stone', count: 35 }], successRate: 0.7 },
+  { level: 10, name: '+10', statMultiplier: 2.0, extraAffixSlots: 2, requiredMaterials: [{ itemId: 'enhance_stone', count: 50 }], successRate: 0.65 },
+  { level: 11, name: '+11', statMultiplier: 2.2, extraAffixSlots: 2, requiredMaterials: [{ itemId: 'enhance_stone', count: 70 }], successRate: 0.6 },
+  { level: 12, name: '+12', statMultiplier: 2.5, extraAffixSlots: 3, requiredMaterials: [{ itemId: 'enhance_stone', count: 100 }], successRate: 0.5, visualEffect: 'golden_glow' }
+]
+
+/**
  * 词缀注册表
  */
 export class AffixRegistry {

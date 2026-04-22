@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import TaobaoAdBanner from '@/components/TaobaoAdBanner.vue'
 
 const playerStore = usePlayerStore()
 const authStore = useAuthStore()
@@ -170,6 +171,9 @@ function logout() {
           <p>收服灵兽，并肩作战</p>
         </div>
       </div>
+
+      <!-- 淘宝联盟广告 -->
+      <TaobaoAdBanner />
     </div>
 
     <!-- 装饰 -->

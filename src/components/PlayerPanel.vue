@@ -32,22 +32,20 @@ const realmNames = computed(() => {
   return `${realmName} · 第${level + 1}层`
 })
 
-// 判断是否可以自动提升境界（灵气满 + 经验满）
+// 判断是否可以自动提升境界（经验满即可，灵气不再参与）
 const canAutoAdvance = computed(() => {
   if (!player.value || !realm.value) return false
-  const spiritFull = player.value.spiritEnergy >= realm.value.spiritCap
   const expFull = player.value.realmLevelExp >= playerStore.getRealmLevelExpNeeded()
   const progressNotFull = player.value.realmLevel < realm.value.realmLevelCap
-  return spiritFull && expFull && progressNotFull
+  return expFull && progressNotFull
 })
 
-// 判断是否可以突破大境界（境界进度满 + 经验满）
+// 判断是否可以突破大境界（只需境界进度满，经验不参与突破判定）
 const canBreakThrough = computed(() => {
   if (!player.value || !realm.value) return false
   if (player.value.realmIndex >= REALMS.length - 1) return false  // 已达最高境界
   const progressFull = player.value.realmLevel >= realm.value.realmLevelCap
-  const expFull = player.value.realmLevelExp >= playerStore.getRealmLevelExpNeeded()
-  return progressFull && expFull
+  return progressFull
 })
 
 const realmGradient = computed(() => {

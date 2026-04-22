@@ -141,6 +141,45 @@ export async function getUserByUsername(username: string): Promise<Omit<UserReco
   return null
 }
 
+// ==================== GM管理 API ====================
+
+export interface GMUserInfo {
+  id: string
+  username: string
+  email: string
+  avatar?: string
+  createdAt: number
+}
+
+export interface GMSaveInfo {
+  characterName: string
+  userId: string | null
+  realmIndex: number
+  realmLevel: number
+  level: number
+  spiritStones: number
+  version: number
+  savedAt: number
+}
+
+/** GM获取所有用户列表 */
+export async function getAllUsersForGM(): Promise<GMUserInfo[]> {
+  return apiClient<GMUserInfo[]>('/gm/users')
+}
+
+/** GM获取所有存档列表 */
+export async function getAllSavesForGM(): Promise<GMSaveInfo[]> {
+  return apiClient<GMSaveInfo[]>('/gm/saves')
+}
+
+/** GM修改指定玩家存档 */
+export async function updatePlayerSaveByGM(characterName: string, playerData: any): Promise<{ success: boolean; message: string }> {
+  return apiClient<{ success: boolean; message: string }>(`/gm/saves/${encodeURIComponent(characterName)}`, {
+    method: 'POST',
+    body: JSON.stringify(playerData)
+  })
+}
+
 // ==================== 初始化 ====================
 
 /** 初始化数据库连接 */

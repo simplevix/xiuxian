@@ -80,6 +80,29 @@ export const useBattleStore = defineStore('battle', () => {
     if (!currentMonster.value || !playerStore.player) return
     const p = playerStore.player
 
+    // 检查并触发法宝技能（灵气满100自动释放）
+    const artifactResult = playerStore.useArtifactSkill()
+    if (artifactResult.success && artifactResult.skill) {
+      const skill = artifactResult.skill
+      // 根据技能类型造成伤害
+      if (skill.type === 'damage') {
+        // 法宝伤害技能：基于玩家攻击力
+        const skillDamage = Math.floor(p.attack * skill.value)
+        currentMonster.value.hp -= skillDamage
+        addLog(`🔮 【${skill.name}】对 ${currentMonster.value.name} 造成 ${skillDamage} 点伤害！`, 'critical')
+      } else if (skill.type === 'heal') {
+        // 治疗技能
+        const healAmount = Math.floor(p.maxHp * skill.value)
+        p.hp = Math.min(p.maxHp, p.hp + healAmount)
+        addLog(`🔮 【${skill.name}】恢复了 ${healAmount} 点生命！`, 'heal')
+      }
+      // 技能触发后检查怪物是否死亡
+      if (currentMonster.value.hp <= 0) {
+        endBattle(true)
+        return
+      }
+    }
+
     // 玩家攻击（含暴击）
     const isCrit = calcCritical()
     let playerDamage = Math.max(1, p.attack - currentMonster.value.defense)

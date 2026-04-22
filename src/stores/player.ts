@@ -328,7 +328,20 @@ export const usePlayerStore = defineStore('player', () => {
       buffs: [],
       shields: [],
       injuries: [],
-      learnedSkills: []
+      learnedSkills: [],
+
+      // 秘境系统
+      secretRealm: {
+        currentRealmId: null,
+        currentFloor: 0,
+        remainingMonsters: 0,
+        enteredRealms: [],
+        realmCooldowns: {},
+        realmBestScores: {},
+        realmChestKeys: 3,
+        completedRealms: [],
+        realmTitles: []
+      }
     }
     
     // 初始化游戏系统
@@ -400,19 +413,18 @@ export const usePlayerStore = defineStore('player', () => {
     }
   }
 
-  // 检查并推进境界进度（灵气满 + 经验满 → 自动提升境界层数）
+  // 检查并推进境界进度（经验满 → 自动提升境界层数）
+  // 灵气独立运行，不再与经验耦合
   function checkAndAdvanceRealmProgress() {
     if (!player.value) return
     const realm = REALMS[player.value.realmIndex]
     
-    // 条件：灵气满 + 经验满 + 境界进度未满
-    const spiritFull = player.value.spiritEnergy >= realm.spiritCap
+    // 条件：经验满 + 境界进度未满（灵气不再参与境界提升）
     const expFull = player.value.realmLevelExp >= getRealmLevelExpNeeded()
     const progressNotFull = player.value.realmLevel < realm.realmLevelCap
     
-    if (spiritFull && expFull && progressNotFull) {
-      // 消耗灵气和经验，提升境界进度
-      player.value.spiritEnergy = 0
+    if (expFull && progressNotFull) {
+      // 只消耗经验，提升境界进度（灵气保留用于法宝技能）
       player.value.realmLevelExp = 0
       player.value.realmLevel++
       recalcStats()
@@ -427,29 +439,27 @@ export const usePlayerStore = defineStore('player', () => {
     checkAndAdvanceRealmProgress()
   }
 
-  // 获取当前境界所需经验
+  // 获取当前境界所需经验（指数级增长公式）
+  // expNeeded(level) = baseExp × growthRate^level
+  // baseExp = 50, growthRate = 1.15
   function getRealmLevelExpNeeded(): number {
-    if (!player.value) return 100
-    const realm = REALMS[player.value.realmIndex]
-    // 经验需求 = 层数 * 100 + 50，层数越高需求越大
-    return (player.value.realmLevel + 1) * 100 + 50
+    if (!player.value) return 50
+    const level = player.value.realmLevel
+    // 50 × 1.15^level，层数越高需求越大
+    return Math.floor(50 * Math.pow(1.15, level))
   }
 
-  // 境界突破 - 手动点击（境界进度满 + 经验满 → 突破到下一大境界）
+  // 境界突破 - 手动点击（境界进度满 → 突破到下一大境界）
+  // 突破不再需要经验，只要境界进度满了就可以手动突破
   function breakThrough(): { success: boolean; message: string } {
     if (!player.value) return { success: false, message: '无角色数据' }
     const realm = REALMS[player.value.realmIndex]
     
-    // 条件：境界进度满 + 经验满 + 未达最高境界
+    // 条件：境界进度满 + 未达最高境界（经验不参与突破判定）
     const progressFull = player.value.realmLevel >= realm.realmLevelCap
-    const expFull = player.value.realmLevelExp >= getRealmLevelExpNeeded()
     
     if (!progressFull) {
       return { success: false, message: `境界进度未满，还需提升${realm.realmLevelCap - player.value.realmLevel}层` }
-    }
-    
-    if (!expFull) {
-      return { success: false, message: '经验不足，请继续刷怪' }
     }
     
     if (player.value.realmIndex >= REALMS.length - 1) {
@@ -459,7 +469,7 @@ export const usePlayerStore = defineStore('player', () => {
     // 突破成功
     player.value.realmIndex++
     player.value.realmLevel = 0  // 新境界从0层开始
-    player.value.realmLevelExp = 0
+    // 保留当前经验，玩家可以继续在新境界积累
     
     // 解锁新境界的阵法
     unlockFormation(player.value.realmIndex)
@@ -907,15 +917,51 @@ export const usePlayerStore = defineStore('player', () => {
     return { count: totalCount, price: totalPrice }
   }
 
-  // 使用法宝技能
-  function useArtifactSkill() {
-    if (!player.value || !player.value.equippedArtifactId) return null
-    const artifact = player.value.artifacts.find(a => a.id === player.value!.equippedArtifactId)
-    if (artifact && artifact.skill.currentCooldown <= 0) {
-      artifact.skill.currentCooldown = artifact.skill.cooldown
-      return artifact.skill
+  // 灵气阈值：积累到100灵气自动触发法宝技能
+  const SPIRIT_SKILL_THRESHOLD = 100
+
+  // 消耗灵气（用于触发法宝技能）
+  function consumeSpiritForSkill(): boolean {
+    if (!player.value) return false
+    if (player.value.spiritEnergy < SPIRIT_SKILL_THRESHOLD) return false
+    
+    player.value.spiritEnergy -= SPIRIT_SKILL_THRESHOLD
+    return true
+  }
+
+  // 检查是否可以使用法宝技能（灵气足够）
+  function canUseArtifactSkill(): boolean {
+    if (!player.value || !player.value.equippedArtifactId) return false
+    return player.value.spiritEnergy >= SPIRIT_SKILL_THRESHOLD
+  }
+
+  // 使用法宝技能（消耗100灵气）
+  function useArtifactSkill(): { success: boolean; skill: any; message: string } {
+    if (!player.value || !player.value.equippedArtifactId) {
+      return { success: false, skill: null, message: '未装备法宝' }
     }
-    return null
+    
+    // 检查灵气是否足够
+    if (player.value.spiritEnergy < SPIRIT_SKILL_THRESHOLD) {
+      return { success: false, skill: null, message: `灵气不足，需要${SPIRIT_SKILL_THRESHOLD}灵气，当前${Math.floor(player.value.spiritEnergy)}` }
+    }
+    
+    const artifact = player.value.artifacts.find(a => a.id === player.value!.equippedArtifactId)
+    if (!artifact) {
+      return { success: false, skill: null, message: '法宝不存在' }
+    }
+    
+    // 消耗灵气
+    player.value.spiritEnergy -= SPIRIT_SKILL_THRESHOLD
+    
+    // 触发技能（设置冷却）
+    artifact.skill.currentCooldown = artifact.skill.cooldown
+    
+    return { 
+      success: true, 
+      skill: artifact.skill, 
+      message: `法宝【${artifact.name}】的【${artifact.skill.name}】已自动释放！` 
+    }
   }
 
   // 重新计算属性
@@ -1190,6 +1236,9 @@ export const usePlayerStore = defineStore('player', () => {
     equipArtifact,
     sellArtifact,
     useArtifactSkill,
+    canUseArtifactSkill,
+    consumeSpiritForSkill,
+    SPIRIT_SKILL_THRESHOLD,
     addTechnique,
     equipTechnique,
     upgradeFormationNode,
