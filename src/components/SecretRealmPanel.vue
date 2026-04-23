@@ -175,7 +175,7 @@ const floorProgress = computed(() => {
 
 function canEnter(realm: SecretRealmConfig): boolean {
   if (!playerStore.player) return false
-  return playerStore.player.level >= realm.minLevel
+  return playerStore.totalLevel >= realm.minLevel
 }
 
 function isOnCooldown(realmId: string): boolean {

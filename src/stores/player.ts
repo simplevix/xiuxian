@@ -1032,17 +1032,22 @@ export const usePlayerStore = defineStore('player', () => {
   async function saveGame() {
     if (player.value) {
       player.value.lastOnline = Date.now()
-      const data = player.value
       const characterName = player.value.name
+
+      // 用 toJSON 避免循环引用（gameSystem 含循环引用 player，不可序列化）
+      const jsonData = JSON.stringify(player.value, (key, value) => {
+        if (key === 'gameSystem') return undefined
+        return value
+      })
 
       // 写入后端 SQLite
       try {
-        await saveToDB(characterName, data)
+        await saveToDB(characterName, JSON.parse(jsonData))
       } catch (e) {
         console.error('后端保存失败，回退到 localStorage:', e)
       }
       // localStorage 作为本地备份
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+      localStorage.setItem(STORAGE_KEY, jsonData)
     }
   }
 
